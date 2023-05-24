@@ -1,0 +1,12 @@
+name: learn-graffle
+title: 学习 OmniGraffle
+version: master
+asciidoc:
+  attributes:
+    numbered: '@'
+    website: https://peacetrue.github.io
+    app-group: com.github.peacetrue
+    app-name: learn-graffle
+start_page: ROOT:index.adoc
+nav:
+  - modules/ROOT/nav.adoc

@@ -1,0 +1,41 @@
+= 概述
+:website: https://peacetrue.github.io
+:app-group: com.github.peacetrue
+:app-name: learn-graffle
+:omnigraffle: https://support.omnigroup.com/documentation/omnigraffle/mac/7.19/en/
+:omniautomation: https://www.omni-automation.com/
+
+image:https://img.shields.io/github/actions/workflow/status/peacetrue/{app-name}/main.yml?branch=master["GitHub Workflow Status",link="https://github.com/peacetrue/{app-name}/actions"]
+image:https://snyk.io/test/github/peacetrue/{app-name}/badge.svg["Snyk",link="https://app.snyk.io/org/peacetrue"]
+image:https://img.shields.io/testspace/tests/peacetrue/peacetrue:{app-name}/master["test space",link="https://peacetrue.testspace.com/"]
+image:https://img.shields.io/codecov/c/github/peacetrue/{app-name}/master["Codecov",link="https://app.codecov.io/gh/peacetrue/{app-name}"]
+image:https://img.shields.io/nexus/r/{app-group}/{app-name}?label={app-name}&server=https%3A%2F%2Foss.sonatype.org%2F["{app-name}",link="https://search.maven.org/search?q={app-name}"]
+
+//@formatter:off
+
+== 简介（What）
+
+{website}/{app-name}/[{app-name}] 是一个记录学习 {omnigraffle}[Omni Graffle^] 和 {omniautomation}[Omni Automation^] 的资源库。
+
+== 背景（Why）
+
+很多概念难以通过语言文字简洁地表达清楚，如果通过图形或动画会更容易办到。
+
+== 用法（How）
+
+[source%nowrap,bash,subs=attributes]
+----
+git clone https://github.com/peacetrue/{app-name}
+----
+
+== 参与者（Who）
+
+. peace(xiayouxue@hotmail.com)
+
+== 活动（When）
+
+初始提交于 2023-05-24，最近提交于 {docdate}。
+
+== 许可证（License）
+
+https://github.com/peacetrue/{app-name}/blob/master/LICENSE[Apache License 2.0^]
