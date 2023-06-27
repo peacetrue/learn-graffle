@@ -1,0 +1,38 @@
+/*{
+    "author": "peace",
+    "targets": ["omnigraffle"],
+    "type": "action",
+    "identifier": "com.github.peacetrue.learn.graffle.entity-draw",
+    "version": "0.1",
+    "description": "绘制实体图表",
+    "label": "实体图表 label",
+    "shortLabel": "实体图表 shortLabel",
+    "mediumLabel": "实体图表 mediumLabel",
+    "paletteLabel": "实体图表 paletteLabel",
+}*/
+(() => {
+
+    let action = new PlugIn.Action(function (selection) {
+        let filePicker = new FilePicker();
+        filePicker.types = [TypeIdentifier.json];
+        filePicker.show()
+            .then(response => {
+                console.info("response: ", response);
+                response[0].fetch(data => {
+                    // console.info("data: ", data instanceof Data)
+                    let entities = JSON.parse(data.toString());
+                    let library = PlugIn.find("com.github.peacetrue.learn.graffle.common-library").library("common-library");
+                    library.drawEntities((selection || document.windows[0].selection).canvas, entities, document.windows[0].centerVisiblePoint);
+                });
+            })
+            .catch(response => {
+                console.error("response: ", response);
+            });
+    });
+
+    action.validate = function (selection) {
+        return true;
+    }
+
+    return action;
+})();

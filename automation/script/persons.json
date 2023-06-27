@@ -1,0 +1,15 @@
+[
+  {
+    "name": "Person",
+    "properties": [
+      {
+        "name": "name",
+        "type": "String"
+      },
+      {
+        "name": "age",
+        "type": "int"
+      }
+    ]
+  }
+]

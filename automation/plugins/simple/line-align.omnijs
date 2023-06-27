@@ -1,0 +1,26 @@
+/*{
+    "author": "peace",
+    "targets": ["omnigraffle"],
+    "type": "action",
+    "identifier": "com.github.peacetrue.learn.graffle.line-align",
+    "version": "0.1",
+    "description": "align line!",
+    "label": "线段对齐",
+    "shortLabel": "线段对齐",
+    "mediumLabel": "线段对齐",
+    "paletteLabel": "线段对齐",
+}*/
+(() => {
+
+    let action = new PlugIn.Action(function (selection) {
+        console.info("selection: ", selection.lines);
+        let library = PlugIn.find("com.github.peacetrue.learn.graffle.common-library").library("common-library");
+        library.align(selection.lines);
+    });
+
+    action.validate = function (selection) {
+        return selection && selection.lines && selection.lines.length > 0;
+    }
+
+    return action;
+})();

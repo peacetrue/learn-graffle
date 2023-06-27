@@ -2,4 +2,5 @@
 * xref:start.adoc[]
 * xref:manual.adoc[]
 * xref:reference.adoc[]
+* xref:faq.adoc[]
 * xref:version.adoc[]

@@ -1,0 +1,57 @@
+/*{
+    "author": "peace",
+    "targets": ["omnigraffle"],
+    "type": "action",
+    "identifier": "com.github.peacetrue.learn.graffle.learn-form",
+    "version": "0.1",
+    "label": "learn-form",
+}*/
+(() => {
+
+    // https://www.omni-automation.com/plugins/forms.html
+    let action = new PlugIn.Action(function (selection) {
+        var inputForm = new Form();
+        var textInput = new Form.Field.String("textInput", "Name", null)
+        var dateInput = new Form.Field.Date("dateInput", "Date", null)
+        var optionsMenu = new Form.Field.Option(
+            "menu",
+            "Position",
+            [1, 2, 3],
+            ["Top", "Middle", "Bottom"],
+            1
+        )
+        var solitaryCheckbox = new Form.Field.Checkbox(
+            "checkbox",
+            "Append to selected paragraph",
+            false
+        )
+        var multiOptionMenu = new Form.Field.MultipleOptions(
+            "multipleOptions",
+            "Multiple Options",
+            [0, 1, 3],
+            ["One", "Two", "Three"],
+            []
+        )
+
+        inputForm.addField(textInput, 0)
+        inputForm.addField(dateInput, 1)
+        inputForm.addField(optionsMenu, 2)
+        inputForm.addField(solitaryCheckbox, 3)
+        inputForm.addField(multiOptionMenu, 4)
+        inputForm.show("This is the form prompt", "OK")
+            .then(response => {
+                console.info("response: ", response);
+                console.info("form: ", response.values);
+                console.info("form: ", JSON.stringify(response.values));
+            })
+            .catch(response => {
+                console.error("response: ", response);
+            });
+    });
+
+    action.validate = function (selection) {
+        return true;
+    }
+
+    return action;
+})();

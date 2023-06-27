@@ -1,0 +1,60 @@
+{
+  "author": "peace",
+  "libraries": [
+    {
+      "identifier": "common"
+    },
+    {
+      "identifier": "memory"
+    },
+    {
+      "identifier": "entity"
+    }
+  ],
+  "identifier": "com.github.peacetrue.learn.graffle",
+  "version": "1.0",
+  "description": "A collection of Omni Automation scripts for learn graffle",
+  "actions": [
+    {
+      "image": "icon.png",
+      "identifier": "table_extract"
+    },
+    {
+      "image": "icon.png",
+      "identifier": "entity_draw"
+    },
+    {
+      "image": "icon.png",
+      "identifier": "memory_draw_abstractly"
+    },
+    {
+      "image": "icon.png",
+      "identifier": "memory_draw_stack_abstractly"
+    },
+    {
+      "image": "icon.png",
+      "identifier": "memory_draw_maps"
+    },
+    {
+      "image": "icon.png",
+      "identifier": "text_load"
+    },
+    {
+      "image": "icon.png",
+      "identifier": "text_clear"
+    },
+    {
+      "image": "icon.png",
+      "identifier": "location_center"
+    },
+    {
+      "image": "icon.png",
+      "identifier": "layer_switch"
+    },
+    {
+      "image": "icon.png",
+      "identifier": "graphic_lighlight"
+    }
+  ],
+  "defaultLocale": "en"
+}

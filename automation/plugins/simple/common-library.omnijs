@@ -1,0 +1,136 @@
+/*{
+	"type": "library",
+	"identifier": "com.github.peacetrue.learn.graffle.common-library",
+    "author": "peace",
+    "description": "peace common library",
+    "targets": ["omnigraffle"],
+	"version": "0.1"
+}*/
+(() => {
+    let library = new PlugIn.Library(new Version("0.1"));
+
+    library.size = new Size(150, 30);
+
+    library.drawShape = function (canvas, point) {
+        let size = this.size;
+        let shape = canvas.newShape();
+        shape.geometry = new Rect(point.x, point.y, size.width, size.height);//几何体边界：矩形
+        shape.shadowColor = null;//阴影颜色
+        shape.strokeThickness = 1;//边框宽度
+        shape.magnets = [
+            new Point(0, 0),
+            new Point(-size.width / 2, 0),
+            new Point(size.width / 2, 0),
+        ];//磁体、磁极：可连线的点
+        return shape;
+    }
+
+    /*
+        let entity = {
+            name: "Person",
+            properties: [
+                {name: "name", type: "String"},
+                {name: "age", type: "int"},
+            ]
+        }
+    */
+
+    library.drawEntity = function (canvas, entity, point) {
+        let shapes = [];
+        let header = this.drawShape(canvas, point);
+        header.fontName = "PingFangSC-Semibold";
+        header.text = entity.name;
+        shapes.push(header);
+        for (let property of entity.properties) {
+            point = new Point(point.x, point.y + this.size.height);
+            let rect = this.drawShape(canvas, point);
+            rect.text = `${property.name}: ${property.type}`;
+            shapes.push(rect);
+        }
+        new Group(shapes);//群组
+        return point;
+    }
+
+    library.drawEntities = function (canvas, entities, point) {
+        for (let entity of entities) {
+            point = this.drawEntity(canvas, entity, new Point(point.x, point.y + this.size.height));
+        }
+    }
+
+    library.getPosition = function (start, end, target) {
+        const endVector = end.subtract(start);
+        const targetVector = target.subtract(start);
+        return endVector.x * targetVector.y - endVector.y * targetVector.x;
+    }
+
+    /** return 是无意义的，只是为了将代码写到一行 */
+    library.align = function (line) {
+        if (line instanceof Array) return line.forEach(_line => this.align(_line));
+
+        let points = line.points;
+        if (points.length !== 3) return console.error("points.length: ", points.length);
+
+        let position = this.getPosition(points[0], points[2], points[1]);
+        if (position === 0) return;
+        if ((points[2].y > points[0].y && position > 0) || (points[2].y < points[0].y && position < 0)) points[1] = new Point(points[0].x, points[2].y);
+        if ((points[2].y > points[0].y && position < 0) || (points[2].y < points[0].y && position > 0)) points[1] = new Point(points[2].x, points[0].y);
+        line.points = points; //必须，触发视图渲染
+    }
+
+    library.drawTable = function (canvas, table, location) {
+
+    }
+
+    library.addRow = function (table, rows, columns) {
+
+    }
+
+    library.adjustTable = function (table, rows, columns) {
+        let maxRows = Math.max(rows, table.rows);
+        let maxColumns = Math.max(columns, table.columns);
+        for (let i = 0; i < maxRows; i++) {
+            for (let j = 0; j < maxColumns; j++) {
+                let graphic = table.graphicAt(i, j);
+                if (graphic == null) {
+                    let prevGraphic = table.graphicAt(i, j - 1);
+                    let geometry = prevGraphic.geometry;
+                    // shape.geometry = new Rect(point.x, point.y, size.width, size.height);//几何体边界：矩形
+                    prevGraphic.duplicateTo(prevGraphic, new Point(geometry.x + geometry.width, geometry.y));
+                }
+            }
+        }
+    }
+
+    /**
+     * 提取表格数据。
+     * @param table 表格
+     * @returns {[][]} 二位数组
+     */
+    library.extractTable = function (table) {
+        let data = [];
+        for (let i = 0; i < table.rows; i++) {
+            data.push([]);
+            for (let j = 0; j < table.columns; j++) {
+                let graphic = table.graphicAt(i, j);
+                graphic && (data[i][j] = graphic.text);
+            }
+        }
+        return data;
+    }
+
+    /**
+     * 使用数据填充表格。
+     * @param table 表格
+     * @param data 二位数组
+     */
+    library.fillTable = function (table, data) {
+        for (let i = 0; i < table.rows; i++) {
+            for (let j = 0; j < table.columns; j++) {
+                let graphic = table.graphicAt(i, j);
+                graphic.text = (data[i] || [])[j] || "";
+            }
+        }
+    }
+
+    return library;
+})();

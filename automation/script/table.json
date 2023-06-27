@@ -1,0 +1,52 @@
+[
+  [
+    "操作",
+    "命令",
+    "结果"
+  ],
+  [
+    "查看寄存器值",
+    "reg read $rsi",
+    "rsi = 0x00007ff7bea2e838"
+  ],
+  [
+    "打印寄存器值(10)",
+    "p $rsi",
+    "(unsigned long) $59 = 140702031996984"
+  ],
+  [
+    "打印寄存器值(16)",
+    "p/x $rsi",
+    "(unsigned long) $60 = 0x00007ff7bea2e838"
+  ],
+  [
+    "打印寄存器值(16)",
+    "p (unsigned long long*)$rsi",
+    "(unsigned long long *) $67 = 0x00007ff7bea2e838"
+  ],
+  [
+    "打印内存值(16)",
+    "p/x *(unsigned long long*)$rsi",
+    "(unsigned long long) $79 = 0x00007ff7bea2ec38"
+  ],
+  [
+    "打印内存值(字符串)",
+    "p (char*)*(unsigned long long*)$rsi",
+    "(char *) $65 = 0x00007ff7bea2ec38 \"…/bin/java"
+  ],
+  [
+    "声明变量",
+    "expr $result=$rsi",
+    "(unsigned long long) $62 = 140702031996984"
+  ],
+  [
+    "查看内存值",
+    "x/g $rsi",
+    "0x7ff7bea2e838: 0x00007ff7bea2ec38"
+  ],
+  [
+    "查看内存值",
+    "x/2g $rsi",
+    "0x7ff7bea2e838: 0x00007ff7bea2ec38 0x00007ff7bea2ec96"
+  ]
+]

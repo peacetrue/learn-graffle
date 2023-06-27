@@ -1,0 +1,9 @@
+= 常见问题
+
+== 待解决
+
+资源库起名为 learn-graffle 还是 learn-automation::
+graffle 和 automation 相互关联，取决于以谁为主。
+目前看来，还是以 graffle 为主。
+
+== 已解决

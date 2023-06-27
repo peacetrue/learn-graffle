@@ -1,0 +1,5 @@
+[
+    "identifier", "displayName", "version",
+    "author", "description", "URL",
+    "actions", "handlers", "libraries"
+]

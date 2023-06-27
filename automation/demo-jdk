@@ -1,0 +1,27 @@
+#!/bin/bash
+# 此脚本用作 macOS 快捷指令"绘制jdk源码类图"的入口。参考 "macOS" "快捷指令" "运行 Shell 脚本"
+# set -x
+
+if [ -z "$workingDir" ]; then
+  export workingDir="$HOME/Documents/Projects"
+fi
+
+i=1
+cd "$workingDir/learn-java" || exit
+echo "$((i++)). 解析源码，生成 JSON 数据"
+export jdk_folder="$workingDir/jdk/src/hotspot"
+export jdk_file_names="symbol.hpp"
+export json_path="$workingDir/learn-graffle/automation/script/demo-jdk.json"
+./gradlew antlr:test --tests CppClassPropertyVisitorTest.jdkClassDiagram >/dev/null # --rerun-tasks
+
+echo -e "\n$((i++)). 打开 Graffle 应用"
+running=$(pgrep -x "OmniGraffle")
+open -a "OmniGraffle" "$workingDir/learn-graffle/docs/README.graffle"
+# 如果之前未打开程序，等待程序打开；之前已经处于运行状态，不用等待
+if [ -z "$running" ]; then
+  sleep 3
+fi
+
+cd "$workingDir/learn-graffle/automation" || exit
+echo -e "\n$((i++)). 绘制类图"
+make automation script_content=demo-jdk.js script_argument=jdk.json >/dev/null

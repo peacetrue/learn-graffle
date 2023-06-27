@@ -1,0 +1,34 @@
+[
+  {
+    "name": "Point",
+    "properties": [
+      {
+        "type": "uint32_t",
+        "name": "_hash_and_refcount"
+      },
+      {
+        "type": "u2",
+        "name": "_length"
+      },
+      {
+        "type": "u1",
+        "name": "_body[2]"
+      }
+    ]
+  },
+  {
+    "name": "Point"
+  },
+  {
+    "name": "Line"
+  },
+  {
+    "name": "Rect"
+  },
+  {
+    "name": "Shape"
+  },
+  {
+    "name": "Shape"
+  }
+]

@@ -1,0 +1,36 @@
+/*{
+    "author": "peace",
+    "targets": ["omnigraffle"],
+    "type": "action",
+    "identifier": "com.github.peacetrue.learn.graffle.table-fill",
+    "version": "0.1",
+    "label": "table-fill",
+}*/
+(() => {
+
+    let action = new PlugIn.Action(function (selection) {
+        console.info("selection: ", selection.graphics);
+        let graphic = selection.graphics[0];
+        let fetch = url => {
+            url.fetch(data => PlugIn.find("com.github.peacetrue.learn.graffle.common-library")
+                    .library("common-library").fillTable(graphic, JSON.parse(data.toString())),
+                response => console.error("response: ", response)
+            )
+        }
+
+        let location = graphic.userData["location"];
+        if (location) return fetch(URL.fromString(`file://${location}`));
+
+        let filePicker = new FilePicker();
+        filePicker.types = [TypeIdentifier.json];
+        filePicker.show()
+            .then(response => fetch(response[0]))
+            .catch(response => console.error("response: ", response));
+    });
+
+    action.validate = function (selection) {
+        return selection && selection.graphics && selection.graphics.length > 0;
+    }
+
+    return action;
+})();

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Canvas</title>
+    <style>
+        div {
+            width: 300px;
+            height: 30px;
+            border: 1px black solid;
+        }
+    </style>
+</head>
+<body>
+
+<div>Person</div>
+<div>name: String</div>
+<div>age: int</div>
+
+<canvas id="myCanvas" width="500" height="300" style="margin: 10px 0; border:1px solid #000000;"></canvas>
+<script>
+    let canvas = document.getElementById("myCanvas");
+    let ctx = canvas.getContext("2d");
+    // 绘制边框框线
+    ctx.strokeRect(0, 0, 300, 120);
+    // 绘制文本
+    ctx.font = "bold 14px Arial";
+    ctx.fillText("Person", 10, 20);
+    ctx.fillText("name: String", 10, 50);
+    ctx.fillText("age: int", 10, 80);</script>
+</body>
+</html>
