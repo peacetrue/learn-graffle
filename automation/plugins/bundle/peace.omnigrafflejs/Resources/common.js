@@ -155,6 +155,17 @@
     }
 
     /**
+     * 读取文件内容。
+     *
+     * @param {String} location 文件位置
+     * @return {Promise}
+     */
+    library.readFileContent = function (location) {
+        !location.startsWith('file:') && (location = `file://${location}`);
+        return this.promiseUrlFetch(URL.fromString(location));
+    }
+
+    /**
      * 从图形中读取文件内容。
      *
      * @param {Graphic} graphic 图形
@@ -166,14 +177,11 @@
         let location = this.option(graphic, locationKey);
         console.info("location: ", location);
         if (!location) return this.selectFileForGraphic(graphic, locationKey);
-        !location.startsWith('file:') && (location = `file://${location}`);
-        console.info("file location: ", location);
-        return this.promiseUrlFetch(URL.fromString(location))
-            .catch(response => {
-                // response:  Error: 未能完成操作。（kCFErrorDomainCFNetwork错误1。）
-                console.error("promiseUrlFetch response: ", response);
-                return this.selectFileForGraphic(graphic, locationKey);
-            });
+        return this.readFileContent(location).catch(response => {
+            // response:  Error: 未能完成操作。（kCFErrorDomainCFNetwork错误1。）
+            console.error("promiseUrlFetch response: ", response);
+            return this.selectFileForGraphic(graphic, locationKey);
+        });
     }
 
     /**
@@ -430,8 +438,8 @@
         let window = document.windows[0];
         let selection = window.selection;
         let graphics = selection.graphics;
-        if (graphics.length === 0) return console.warn("no selection.graphics");
-        window.setViewForCanvas(selection.canvas, 1, graphics[0].geometry.center);
+        if (graphics.length === 0) return console.warn("locateCenter: no selection.graphics");
+        window.setViewForCanvas(selection.canvas, window.zoom, graphics[0].geometry.center);
     }
 
     /**

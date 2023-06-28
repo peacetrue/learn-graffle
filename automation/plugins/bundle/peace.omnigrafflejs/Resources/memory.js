@@ -20,18 +20,20 @@
         return paddingChar.repeat(length - str.length) + str;
     }
 
-    function formatMemorySize(size) {
-        if (size < 1024) {
-            return size + 'B';
-        } else if (size < 1024 * 1024) {
-            return (size / 1024).toFixed(2) + 'KB';
-        } else if (size < 1024 * 1024 * 1024) {
-            return (size / (1024 * 1024)).toFixed(2) + 'MB';
-        } else if (size < 1024 * 1024 * 1024 * 1024) {
-            return (size / (1024 * 1024 * 1024)).toFixed(2) + 'GB';
-        } else {
-            return (size / (1024 * 1024 * 1024 * 1024)).toFixed(2) + 'TB';
+    /**
+     * 格式化内存空间。
+     * @param {Number} sizeInBytes 内存空间
+     * @returns {string} 带单位的内存空间
+     */
+    function formatMemorySize(sizeInBytes) {
+        const units = ["B", "KB", "MB", "GB", "TB", "PB"];
+        let size = sizeInBytes;
+        let unitIndex = 0;
+        while (size >= 1024 && unitIndex < units.length - 1) {
+            size /= 1024;
+            unitIndex++;
         }
+        return `${size.toFixed(2)} ${units[unitIndex]}`;
     }
 
 
@@ -58,13 +60,13 @@
         rectSize: new Size(200, 70),
         rectTextSize: undefined,
         rectFillColors: {
-            "anon": Color.RGB(1.0, 1.0, 0.75),  // 黄色
-            "": Color.RGB(0.8, 0.8, 0.8),       // 灰色，无描述表示未使用
-            "*": Color.RGB(0.75, 1.0, 1.0),     // 蓝色，有效数据
+            "[anon]": Color.RGB(0.75, 1.0, 0.75),// 浅绿
+            "": Color.RGB(0.8, 0.8, 0.8),        // 灰色，无描述表示未使用
+            "*": Color.RGB(0.75, 1.0, 1.0),      // 蓝色，有效数据
         },
         lineWidth: 100,
         labelSize: new Size(150, 20),
-        labelTextBase: 10,// 标签文本显示内存地址时使用的进制，栈时使用 10 进制，其他使用 16 进制
+        labelTextBase: 16,// 标签文本显示内存地址时使用的进制，栈时使用 10 进制，其他使用 16 进制
         labelTextLength: 16,
         showSize: true,     // 是否显示占用空间
         sizeStyle: 'outer', // 占用空间显示样式：outer、inner
@@ -154,6 +156,7 @@
      * @return {Graphic} 虚拟内存单元图
      */
     library.drawMemoryBlocksAbstractly = function (canvas, startPoint, descriptions) {
+        console.info("drawMemoryBlocksAbstractly");
         return new Group(
             descriptions.map((description, index) => {
                 if (index > 0) startPoint = startPoint.subtract(new Point(0, this.dynamic.rectSize.height));
@@ -181,7 +184,7 @@
             .then(responce => {
                 let data = JSON.parse(responce.data);
                 let size = data.size + 8;  // 从 start(=0) + step 到 size
-                this.dynamic.labelTextLength = size.toString().length;
+                // this.dynamic.labelTextLength = size.toString().length;
                 let blocks = this.buildBlocksForFrame(size);
                 console.info("blocks.length: ", blocks.length);
                 blocks = this.sortBlocks(blocks);
@@ -236,27 +239,32 @@
     /**
      * 基于内存映射，绘制虚拟内存。
      *
-     * @param {Canvas} canvas 画布
-     * @param {Point} origin 起点
-     * @return {Graphic} 绘制的虚拟内存图
+     * @param {Canvas} [canvas] 画布
+     * @param {Point} [origin] 起点
+     * @param {String} [content] 内容
+     * @return {Graphic} 虚拟内存图
      */
-    library.drawMemoryForMaps = function (canvas, origin) {
+    library.drawMemoryForMaps = function (canvas, origin, content) {
         console.info("drawMemoryForMaps");
         this.setStyle('small');
         let common = this.plugIn.library("common");
         canvas = canvas || common.canvas();
         origin = origin || common.windowCenterPoint();
         // readFileContentForGraphic(canvas, "maps-location")
-        return common.selectFile()
+        return (content ? new Promise(resolve => resolve({data:content})) : common.selectFile())
             .then(response => {
                 console.info("selectFile response: ", response);
                 let blocks = this.resolveMaps(response.data);
-                blocks.unshift({startAddress: 0, endAddress: blocks[0].startAddress});// 从 0 开始显示
+                blocks.unshift({startAddress: 0n, endAddress: blocks[0].startAddress});// 从 0 开始显示
+                blocks.push({
+                    startAddress: blocks[blocks.length - 1].endAddress,// BigInt 和 BigInt 才能相减求 size
+                    endAddress: BigInt("0xffffffffffffffff"), // 截止到 16 个 f，数值溢出，需要使用 BigInt
+                });
                 console.info("original blocks.length: ", blocks.length);
-                blocks = this.mergeBlocks(blocks);
-                console.info("merged blocks.length: ", blocks.length);
                 blocks = this.paddingBlocks(this.sortBlocks(blocks));
                 console.info("padding blocks.length: ", blocks.length);
+                blocks = this.mergeBlocks(blocks);
+                console.info("merged blocks.length: ", blocks.length);
                 this.drawMemoryBlocks(canvas, origin, blocks);
             })
             .catch(response => {
@@ -281,10 +289,11 @@
             .map(cells => {
                 // console.info("cells: ", cells);
                 let addresses = cells[0].split("-");
+                // 16 个 f 需要使用 BigInt 才能表示
                 return {
-                    startAddress: parseInt(addresses.shift(), 16),
-                    endAddress: parseInt(addresses.shift(), 16),
-                    description: cells[5].split("/").pop() || "anon" //全路径太长，只取末尾的程序名
+                    startAddress: BigInt(parseInt(addresses.shift(), 16)),
+                    endAddress: BigInt(parseInt(addresses.shift(), 16)),
+                    description: cells[5].split("/").pop() || "[anon]" //全路径太长，只取末尾的程序名
                 };
             });
     }
@@ -344,6 +353,7 @@
      * @return {Graphic} 绘制的图形
      */
     library.drawMemoryBlocks = function (canvas, origin, blocks) {
+        console.info("drawMemoryBlocks");
         let array = blocks.map((block, index) => {
             // console.info("block: ", JSON.stringify(block));
             if (index === 0) return this.drawMemoryBlock(canvas, origin, block);
@@ -370,6 +380,7 @@
      * @return {Graphic} 绘制的图形
      */
     library.drawMemoryBlock = function (canvas, startPoint, block) {
+        // console.info(`drawMemoryBlock. startPoint=${startPoint}, block=${block}`);
         let dynamic = this.dynamic;
         let endPoint = new Point(startPoint.x, startPoint.y - dynamic.rectSize.height);
         let graphics = [
@@ -378,10 +389,9 @@
             this.drawMemoryAddress(canvas, endPoint, block.endAddress),
         ];
         if (!dynamic.showSize) return new Group(graphics);
-
-        let size = formatMemorySize(block.endAddress - block.startAddress);
+        let size = Number(block.endAddress - block.startAddress);
         if (dynamic.sizeStyle === 'outer') graphics.push(this.drawMemorySize(canvas, endPoint, size));
-        else graphics[0].text += ` (${size})`;
+        else graphics[0].text += ` (${formatMemorySize(size)})`;
         return new Group(graphics);
     }
 
@@ -410,7 +420,7 @@
      *
      * @param {Canvas} canvas 画布
      * @param {Point} origin 起点
-     * @param {Number} address 地址
+     * @param {Number|BigInt} address 地址
      * @return {Group} 绘制的图形
      */
     library.drawMemoryAddress = function (canvas, origin, address) {
@@ -438,14 +448,18 @@
     /**
      * 格式化内存地址。
      *
-     * @param {Number} address 内存地址
+     * PlugIn.find('com.github.peacetrue.learn.graffle').library('memory').formatMemoryAddress(BigInt("0xffffffffffffffff"))
+     *
+     * @param {Number|BigInt} address 内存地址
      * @return {String} 内存地址描述
      */
     library.formatMemoryAddress = function (address) {
+        // console.info(`formatMemoryAddress. address=${address}`);
         let dynamic = this.dynamic;
         let text = address < 0 ? '-' : ' '; //符号位
         if (dynamic.labelTextBase === 16) text += '0x'; //16 进制标志
-        return text + Math.abs(address).toString(dynamic.labelTextBase).leftPad(dynamic.labelTextLength, '0');
+        let absAddress = address > 0 ? address : -address;
+        return text + absAddress.toString(dynamic.labelTextBase).leftPad(dynamic.labelTextLength, '0');
     }
 
     /**
