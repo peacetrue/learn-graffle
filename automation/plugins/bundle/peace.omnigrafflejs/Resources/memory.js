@@ -60,9 +60,9 @@
         rectSize: new Size(200, 70),
         rectTextSize: undefined,
         rectFillColors: {
-            "anon": Color.RGB(1.0, 1.0, 0.75),  // 黄色
-            "": Color.RGB(0.8, 0.8, 0.8),       // 灰色，无描述表示未使用
-            "*": Color.RGB(0.75, 1.0, 1.0),     // 蓝色，有效数据
+            "[anon]": Color.RGB(0.75, 1.0, 0.75),// 浅绿
+            "": Color.RGB(0.8, 0.8, 0.8),        // 灰色，无描述表示未使用
+            "*": Color.RGB(0.75, 1.0, 1.0),      // 蓝色，有效数据
         },
         lineWidth: 100,
         labelSize: new Size(150, 20),
@@ -239,18 +239,19 @@
     /**
      * 基于内存映射，绘制虚拟内存。
      *
-     * @param {Canvas} canvas 画布
-     * @param {Point} origin 起点
-     * @return {Graphic} 绘制的虚拟内存图
+     * @param {Canvas} [canvas] 画布
+     * @param {Point} [origin] 起点
+     * @param {String} [content] 内容
+     * @return {Graphic} 虚拟内存图
      */
-    library.drawMemoryForMaps = function (canvas, origin) {
+    library.drawMemoryForMaps = function (canvas, origin, content) {
         console.info("drawMemoryForMaps");
         this.setStyle('small');
         let common = this.plugIn.library("common");
         canvas = canvas || common.canvas();
         origin = origin || common.windowCenterPoint();
         // readFileContentForGraphic(canvas, "maps-location")
-        return common.selectFile()
+        return (content ? new Promise(resolve => resolve({data:content})) : common.selectFile())
             .then(response => {
                 console.info("selectFile response: ", response);
                 let blocks = this.resolveMaps(response.data);
@@ -260,10 +261,10 @@
                     endAddress: BigInt("0xffffffffffffffff"), // 截止到 16 个 f，数值溢出，需要使用 BigInt
                 });
                 console.info("original blocks.length: ", blocks.length);
-                blocks = this.mergeBlocks(blocks);
-                console.info("merged blocks.length: ", blocks.length);
                 blocks = this.paddingBlocks(this.sortBlocks(blocks));
                 console.info("padding blocks.length: ", blocks.length);
+                blocks = this.mergeBlocks(blocks);
+                console.info("merged blocks.length: ", blocks.length);
                 this.drawMemoryBlocks(canvas, origin, blocks);
             })
             .catch(response => {
@@ -292,7 +293,7 @@
                 return {
                     startAddress: BigInt(parseInt(addresses.shift(), 16)),
                     endAddress: BigInt(parseInt(addresses.shift(), 16)),
-                    description: cells[5].split("/").pop() || "anon" //全路径太长，只取末尾的程序名
+                    description: cells[5].split("/").pop() || "[anon]" //全路径太长，只取末尾的程序名
                 };
             });
     }

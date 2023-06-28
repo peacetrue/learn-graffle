@@ -14,3 +14,4 @@
 .. script 脚本，包含脚本内容和脚本参数
 .. Makefile 封装脚本命令
 .. demo-jdk 绘制 jdk 源码类图的 Shell 脚本
+.. demo-memory 绘制虚拟内存的 Shell 脚本

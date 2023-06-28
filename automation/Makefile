@@ -1,7 +1,10 @@
 CODE=code
 PLUGINS=plugins
 SCRIPT=script
-BUILD=build
+SUBDIR:=#在子目录下构建时使用，默认为空格，设置时需要以 / 起始，例如：SUBDIR=/dynamic
+BUILD:=build$(SUBDIR)#设置构建目录
+#删除 BUILD 中的空格，避免执行 clean 时，误删根目录。如果传入 SUBDIR=' / sub'，则删除命令为 rm -rf build / sub，结果很惨烈，好在是虚拟机
+BUILD:=$(shell echo "$(BUILD)" | tr -d ' ')
 
 .SUFFIXES:#取消默认文件后缀识别
 .SECONDARY:#保留中间过程文件
@@ -29,13 +32,12 @@ $(BUILD)/%.encode: $(SCRIPT)/% $(BUILD)
 #自动化
 script_content=default-statement.js
 script_argument=default-argument.json
-# make automation
-# make automation script_content=default-function.js
-# make automation script_content=entity-draw.js script_argument=demo-jdk.json
-$(BUILD)/automation: $(BUILD)/$(script_content).encode $(BUILD)/$(script_argument).encode
+# make automation # make automation script_content=default-function.js # make automation script_content=entity-draw.js script_argument=demo-jdk.json
+automation: $(BUILD)/$(script_content).encode $(BUILD)/$(script_argument).encode
 	open "omnigraffle:///omnijs-run?script=$(shell cat $<)&arg=$(shell cat $(BUILD)/$(script_argument).encode)"
-# make plugin-view.automation
-# make plugin-perform.automation
-# make demo-jdk.automation
-$(BUILD)/%.automation:
-	make $(BUILD)/automation script_content=$*.js script_argument=$*.json
+# make automation/plugin-view # make automation/plugin-perform # make automation/demo-jdk
+automation/%:
+	make automation script_content=$*.js script_argument=$*.json
+demo-memory.case:
+	make automation/demo-memory
+#	make automation script_content=demo-memory.js
