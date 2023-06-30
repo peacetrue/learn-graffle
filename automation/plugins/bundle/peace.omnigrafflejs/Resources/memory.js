@@ -242,16 +242,18 @@
      * @param {Canvas} [canvas] 画布
      * @param {Point} [origin] 起点
      * @param {String} [content] 内容
+     * @param {String} [location] 内容
      * @return {Graphic} 虚拟内存图
      */
-    library.drawMemoryForMaps = function (canvas, origin, content) {
+    library.drawMemoryForMaps = function (canvas, origin, content, location) {
         console.info("drawMemoryForMaps");
         this.setStyle('small');
         let common = this.plugIn.library("common");
         canvas = canvas || common.canvas();
         origin = origin || common.windowCenterPoint();
         // readFileContentForGraphic(canvas, "maps-location")
-        return (content ? new Promise(resolve => resolve({data:content})) : common.selectFile())
+        return (content ? new Promise(resolve => resolve({data: content})) : common.selectFile())
+            // return (location ? common.readFileContent(location) : common.selectFile())
             .then(response => {
                 console.info("selectFile response: ", response);
                 let blocks = this.resolveMaps(response.data);
@@ -265,7 +267,7 @@
                 console.info("padding blocks.length: ", blocks.length);
                 blocks = this.mergeBlocks(blocks);
                 console.info("merged blocks.length: ", blocks.length);
-                this.drawMemoryBlocks(canvas, origin, blocks);
+                return this.drawMemoryBlocks(canvas, origin, blocks);
             })
             .catch(response => {
                 console.error("selectFile response: ", response);
@@ -293,7 +295,7 @@
                 return {
                     startAddress: BigInt(parseInt(addresses.shift(), 16)),
                     endAddress: BigInt(parseInt(addresses.shift(), 16)),
-                    description: cells[5].split("/").pop() || "[anon]" //全路径太长，只取末尾的程序名
+                    description: (cells[5] || "").split("/").pop() || "[anon]" //全路径太长，只取末尾的程序名
                 };
             });
     }

@@ -1,0 +1,13 @@
+#!/bin/bash
+# SC2046: Quote this to prevent word splitting.
+# https://github.com/koalaman/shellcheck/wiki/SC2046
+set -x
+
+cat script/plugin-view.js
+echo `cat script/plugin-view.js`
+echo "`cat script/plugin-view.js`"
+echo $(cat script/plugin-view.js)
+echo "$(cat script/plugin-view.js)"
+result=`cat script/plugin-view.js`
+echo $result
+echo "$result"
