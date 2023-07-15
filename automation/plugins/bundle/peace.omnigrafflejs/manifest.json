@@ -1,20 +1,13 @@
 {
-  "author": "peace",
-  "libraries": [
-    {
-      "identifier": "common"
-    },
-    {
-      "identifier": "memory"
-    },
-    {
-      "identifier": "entity"
-    }
-  ],
   "identifier": "com.github.peacetrue.learn.graffle",
   "version": "1.0",
   "description": "A collection of Omni Automation scripts for learn graffle",
+  "author": "peace",
   "actions": [
+    {
+      "image": "icon.png",
+      "identifier": "test"
+    },
     {
       "image": "icon.png",
       "identifier": "table_extract"
@@ -54,6 +47,17 @@
     {
       "image": "icon.png",
       "identifier": "graphic_lighlight"
+    }
+  ],
+  "libraries": [
+    {
+      "identifier": "common"
+    },
+    {
+      "identifier": "memory"
+    },
+    {
+      "identifier": "entity"
     }
   ],
   "defaultLocale": "en"

@@ -1,9 +1,60 @@
 (() => {
 
     let library = new PlugIn.Library(new Version("0.1"));
+    library.plugIn.resourceNamed("libs/logger.js").fetch(response => eval(response.toString()));
+    // 反例：其他类库未完成初始化时，不能获取当前类库
+    // 正例：library.plugIn.resourceNamed("logger.js").fetch(response => eval(response.toString()));
+    // eval 时需要注意绑定的对象
+    library.loadClass = function (name, path = `libs/${name}.js`) {
+        console.info("loadLib: ", path);
+        if (name in Object) {
+            console.info(`lib '${path}' loaded`);
+            return new Promise((resolve, reject) => resolve(Object[name]))
+        }
+        return this.promiseUrlFetch(this.plugIn.resourceNamed(path))
+            .then(response => {
+                let content = response.data;
+                console.info(`lib '${path}': \n`, content);
+                eval(content);
+                eval(`Object[name] = ${name}`);
+                return Object[name];
+            });
+    }
+
+    library.loadClass("PeaceTable");
+    // library.plugIn.resourceNamed("libs/PeaceTable.js").fetch(response => {
+    //     eval(response.toString());
+    //     Object.PeaceTable = PeaceTable;
+    // });
+
+    library.test = function () {
+        console.info("PeaceTable: ", Object.PeaceTable);
+    }
+
 
     /** 如果想添加未事先声明的变量，需要使用 variables */
     library.dynamic = {};
+
+
+    /**
+     * 操作选项。
+     *
+     * @param {Canvas|Graphic|Object} object
+     * @param {String} key
+     * @param {Object} [value]
+     * @return {Object}
+     */
+    library.option = function (object, key, value) {
+        console.info(`option. object: ${object}, key: ${key}, value: ${value}`);
+        let actions = {
+            "Canvas": (key, value) => this.canvasOption(object, key, value),
+            "*": (key, value) => value === undefined ? object.userData[key] : object.setUserData(key, value),
+        }
+        let className = object.constructor.name;
+        let action = actions[className] || actions['*'];
+        return action(key, value);
+    }
+
     /** 保存各 canvas 的配置，以 canvas.name 为 key */
     library.canvases = {};
 
@@ -23,25 +74,6 @@
             this.canvases[canvas.name] = options
         }
         return value === undefined ? options[key] : (options[key] = value);
-    }
-
-    /**
-     * 操作选项。
-     *
-     * @param {Object} object
-     * @param {String} key
-     * @param {Object} [value]
-     * @return {Object}
-     */
-    library.option = function (object, key, value) {
-        console.info(`option. object: ${object}, key: ${key}, value: ${value}`);
-        let actions = {
-            "Canvas": (key, value) => this.canvasOption(object, key, value),
-            "*": (key, value) => value === undefined ? object.userData[key] : object.setUserData(key, value),
-        }
-        let className = object.constructor.name;
-        let action = actions[className] || actions['*'];
-        return action(key, value);
     }
 
     /**
@@ -90,6 +122,10 @@
      */
     library.canvas = function () {
         return document.windows[0].selection.canvas;
+    }
+
+    library.selectedGraphic = function () {
+        return document.windows[0].selection.graphics[0];
     }
 
     /**
@@ -449,6 +485,7 @@
      * @param {Graphic[]} target 目标图形集合
      */
     library.addConnected = function (source, target) {
+        console.info(`addConnected. target.length=${target.length}`);
         if (!source) return;
 
         if (source instanceof Array) {
@@ -473,7 +510,7 @@
         let target = [];
         this.addConnected(graphics, target);
         console.info(`target.length=${target.length}`);
-        document.windows[0].selection.view.select(target, true);
+        document.windows[0].selection.view.select(target, false);
     }
 
     /**
