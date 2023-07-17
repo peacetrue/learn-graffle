@@ -9,7 +9,7 @@
 
 == 简介（What）
 
-{website}/{app-name}/[{app-name}] 是一个记录学习 {omnigraffle}[Omni Graffle^] 和 {omniautomation}[Omni Automation^] 的资源库。
+{website}/{app-name}/[{app-name}] 用于记录学习 {omnigraffle}[Omni Graffle^] 和 {omniautomation}[Omni Automation^] 的过程。
 
 == 背景（Why）
 

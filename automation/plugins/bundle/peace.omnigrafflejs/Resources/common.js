@@ -21,7 +21,6 @@
             });
     }
 
-    library.loadClass("PeaceTable");
     // library.plugIn.resourceNamed("libs/PeaceTable.js").fetch(response => {
     //     eval(response.toString());
     //     Object.PeaceTable = PeaceTable;

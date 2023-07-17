@@ -1,12 +1,7 @@
-(() => {
-
-    let action = new PlugIn.Action(function (selection) {
-        this.plugIn.library("common").switchLayers(selection.graphics[0]);
+(function () {
+    return new PlugIn.Action(function (selection) {
+        var that = this;
+        var layerSwitcher = that.plugIn.library("memory")["LayerSwitcher"];
+        layerSwitcher.switch(selection.graphics[0]);
     });
-
-    action.validate = function (selection) {
-        return selection && selection.graphics && selection.graphics.length === 1;
-    }
-
-    return action;
 })();

@@ -9,7 +9,11 @@ graffle 和 automation 相互关联，取决于以谁为主。
 https://discourse.omnigroup.com/t/online-library-for-plugins-like-stenciltown/42197[像 Stenciltown 这样的插件在线库？^]::
 -
 
-绑定插件中，PlugIn.Library、PlugIn.Action 能否保存在不同的目录下？::
+https://discourse.omnigroup.com/t/omnigraffle-animation-script/57157[OmniGraffle Animation Script^]::
 -
+
+绑定插件中，PlugIn.Library、PlugIn.Action 能否保存在不同的目录下？::
+不能
+
 
 == 已解决

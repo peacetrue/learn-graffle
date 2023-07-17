@@ -6,11 +6,11 @@
   "actions": [
     {
       "image": "icon.png",
-      "identifier": "test"
+      "identifier": "table_extract"
     },
     {
       "image": "icon.png",
-      "identifier": "table_extract"
+      "identifier": "table_draw"
     },
     {
       "image": "icon.png",
@@ -50,6 +50,9 @@
     }
   ],
   "libraries": [
+    {
+      "identifier": "library"
+    },
     {
       "identifier": "common"
     },
