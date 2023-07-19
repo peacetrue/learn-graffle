@@ -3,7 +3,9 @@
  * 抽象虚拟内存：没有虚拟地址或者虚拟地址是不真实的
  * 具体虚拟内存：虚拟地址是真实的
  * 程序运行起来才能得到具体虚拟地址，否则就使用抽象的方法分析虚拟内存。
+ * PlugIn.find("com.github.peacetrue.learn.graffle").library("common").canvas()
  */
+
 class Common {
 
   /** 保存各 canvas 的配置，以 canvas.name 为 key */
@@ -12,12 +14,12 @@ class Common {
   /**
    * 操作选项。
    *
-   * @param  object
-   * @param  key
-   * @param  [value]
+   * @param object
+   * @param key
+   * @param [value]
    * @return
    */
-  public static option(object: Graphic | Canvas, key: string, value?: string) {
+  public static option(object: Solid | Canvas, key: string, value?: string) {
     console.info(`option. object: ${object}, key: ${key}, value: ${value}`);
     let actions = {
       "Canvas": (object: Canvas, key, value) => this.canvasOption(object, key, value),
@@ -32,9 +34,9 @@ class Common {
   /**
    * 操作 canvas 选项。
    *
-   * @param  canvas
-   * @param  key
-   * @param  [value]
+   * @param canvas
+   * @param key
+   * @param [value]
    * @return
    */
   public static canvasOption(canvas: Canvas, key, value) {
@@ -47,12 +49,7 @@ class Common {
     return value === undefined ? options[key] : (options[key] = value);
   }
 
-  /**
-   * URL.fetch to Promise。
-   *
-   * @param {URL} url url
-   * @return {Promise} URL.fetch(Data)
-   */
+  /** URL.fetch to Promise。*/
   public static promiseUrlFetch(url: URL): Promise<{ url: URL, data: string }> {
     return new Promise((resolve, reject) => {
       url.fetch(
@@ -66,39 +63,31 @@ class Common {
     return new Promise((resolve, reject) => resolve(data));
   }
 
-  public static document() {
-    return document;
+  /** 获取当前选中对象。*/
+  public static selection(): Selection {
+    return document.windows[0].selection;
   }
 
-  /**
-   * 获取当前选中的画布。
-   *
-   * PlugIn.find("com.github.peacetrue.learn.graffle").library("common").canvas()
-   *
-   * @return
-   */
+  /** 获取当前选中的画布。*/
   public static canvas(): Canvas {
-    return this.document().windows[0].selection.canvas;
+    return this.selection().canvas;
   }
 
-  public static selectedGraphic() {
-    return this.document().windows[0].selection.graphics[0];
+  /** 获取当前选中的第一个元素。*/
+  public static selectedGraphic(): Graphic | undefined {
+    return this.selection().graphics[0];
   }
 
-  /**
-   * 获取当前窗口中心点。
-   *
-   * @return {Point}
-   */
+  /** 获取当前窗口中心点。*/
   public static windowCenterPoint() {
-    return this.document().windows[0].centerVisiblePoint;
+    return document.windows[0].centerVisiblePoint;
   }
 
 
   /**
    * 选择文件。
    *
-   * @param  [types] 文件类型集合
+   * @param [types] 文件类型集合
    * @return
    */
   public static selectFile(types?: TypeIdentifier[]) {
@@ -112,14 +101,13 @@ class Common {
   }
 
   /**
-   * 为图形选择文件。选择文件后，记录下文件位置。
+   * 选择文件后，记录下文件位置。
    *
-   * @param  object 图形
-   * @param  locationKey 位置键
-   * @return {Promise} URL.fetch(Data)
+   * @param object 关联对象
+   * @param locationKey 位置键
    */
-  public static selectFileForGraphic(object: Graphic | Canvas, locationKey: string) {
-    console.info("selectFileForGraphic");
+  public static selectFileAssociatively(object: Solid | Canvas, locationKey: string) {
+    console.info("selectFileAssociatively");
     return this.selectFile().then(response => {
       this.option(object, locationKey, response.url.toString());
       return response;
@@ -134,8 +122,7 @@ class Common {
   /**
    * 读取文件内容。
    *
-   * @param  location 文件位置
-   * @return {Promise}
+   * @param location 文件位置
    */
   public static readFileContent(location: string) {
     !location.startsWith('file:') && (location = `file://${location}`);
@@ -143,26 +130,25 @@ class Common {
   }
 
   /**
-   * 从图形中读取文件内容。
+   * 从关联对象中读取文件内容。
    *
-   * @param  object 图形
-   * @param  locationKey 文件位置键
-   * @return {Promise} URL.fetch(Data)
+   * @param object 关联对象
+   * @param locationKey 文件位置键
    */
-  public static readFileContentForGraphic(object: Graphic | Canvas, locationKey) {
-    console.info("readFileContentForGraphic");
-    console.debug("app.optionKeyDown: ", app.optionKeyDown);
+  public static readFileContentAssociatively(object: Solid | Canvas, locationKey: string) {
+    console.info("readFileContentAssociatively");
+    console.debug(`app.optionKeyDown: ${app.optionKeyDown}`);
     if (app.optionKeyDown) {
       this.option(object, locationKey, null);
       return Promise.reject("clear cache!");
     }
     let location = this.option(object, locationKey);
     console.info("location: ", location);
-    if (!location) return this.selectFileForGraphic(object, locationKey);
+    if (!location) return this.selectFileAssociatively(object, locationKey);
     return this.readFileContent(location).catch(response => {
       // response:  Error: 未能完成操作。（kCFErrorDomainCFNetwork错误1。）
       console.error("promiseUrlFetch response: ", response);
-      return this.selectFileForGraphic(object, locationKey);
+      return this.selectFileAssociatively(object, locationKey);
     });
   }
 
@@ -170,42 +156,44 @@ class Common {
    * 从文件读取内容后设置到图形中。
    * 文件内容过多，可分开显示到多个图形中。
    *
-   * @param {Graphic[]} graphics 图形集合
-   * @param  locationKey 位置键
-   * @param {int} [length] 图形数目
-   * @return {Promise}
+   * @param graphics 图形集合
+   * @param locationKey 位置键
+   * @param [length] 图形数目
    */
-  public static loadGraphicsText(graphics, locationKey, length) {
-    console.info("loadGraphicsText graphics.length: ", graphics.length);
+  public static loadGraphicsText(graphics: Solid[], locationKey: string, length?: number) {
+    console.info("loadGraphicsText");
+    console.debug(`graphics.length: ${graphics.length}`);
+
     let graphic = graphics[0];
     length = length || graphic.userData['length'] || 1;
-    return this.readFileContentForGraphic(graphic, locationKey)
+    return this.readFileContentAssociatively(graphic, locationKey)
       .then(response => {
         let canvas = this.canvas();
         let location = graphic.userData[locationKey];
-        graphics = canvas.allGraphicsWithUserDataForKey(location, locationKey);
-        console.info("allGraphicsWithUserDataForKey.length: ", graphics.length);
+        graphics = canvas.allGraphicsWithUserDataForKey(location, locationKey) as Solid[];
+        console.info(`allGraphicsWithUserDataForKey.length: ${graphics.length}`);
         if (graphics.length < length) graphics = this.duplicateGraphicToLayers(canvas, graphic, length);
         this.setGraphicsText(graphics, response.data);
         return response;
       })
       .catch(response => {
-        console.error("readFileContentForGraphic response: ", response);
+        console.error("loadGraphicsText response: ", response);
       });
   }
 
   /**
    * 将内容拆分后均匀分摊到图形集合。
    *
-   * @param {Graphic[]} graphics 图形集合
-   * @param  content 文本内容
-   * @return {void}
+   * @param graphics 图形集合
+   * @param text 文本内容
    */
-  public static setGraphicsText(graphics, content) {
+  public static setGraphicsText(graphics: Solid[], text) {
     console.info("setGraphicsText");
-    if (graphics.length === 1) return graphics[0].text = content;
+    if (graphics.length === 1) {
+      return graphics[0].text = text;
+    }
 
-    let lines = content.split("\n");
+    let lines = text.split("\n");
     let lineCountPerGraphic = lines.length / graphics.length;
     let index = 0;
     for (let graphic of graphics) {
@@ -217,11 +205,23 @@ class Common {
   }
 
   /**
+   * 设置图形内容为行号。
+   *
+   * @param graphic 图形
+   * @param lineCountKey 行数键
+   * @param lineCountValue 行数值
+   */
+  public static setGraphicLineNumber(graphic: Solid, lineCountKey: string = "line.count", lineCountValue: number = 10) {
+    lineCountValue = graphic.userData[lineCountKey] || lineCountValue;
+    graphic.text = Array.from({length: lineCountValue}, (_, i) => i + 1).join("\n");
+  }
+
+  /**
    * 复制图形到一个新创建的图层中。
    * 图层命名为：layer-0、layer-1。
    *
-   * @param  canvas 画布
-   * @param  graphic 图形
+   * @param canvas 画布
+   * @param graphic 图形
    * @param {int} length 图形数目
    * @return {void}
    */
@@ -252,7 +252,7 @@ class Common {
   /**
    * 清除图形内的文本。
    *
-   * @param {Graphic[]} graphics  图形
+   * @param graphics  图形
    */
   public static clearGraphicsText(graphics) {
     if (graphics instanceof Array) {
@@ -270,7 +270,7 @@ class Common {
    * 获取矩形指定位置处的点。方位顺序：上下左右，top-left。
    *
    * @param {Rect} rect 矩形
-   * @param  location 位置，top、middle、bottom、left、center、right
+   * @param location 位置，top、middle、bottom、left、center、right
    * @return {Point} 点
    */
   public static pointOfRect(rect, location) {
@@ -325,13 +325,13 @@ class Common {
   /**
    * 绘线，并在线上添加描述。
    *
-   * @param  canvas 画布
+   * @param canvas 画布
    * @param {Point[]} points 起止点集合
-   * @param  [description] 描述
+   * @param [description] 描述
    * @param {Boolean} [center] 默认在起点处绘制文本，true 在中点处绘制文本
    * @return  线（或带文本）
    */
-  public static drawLine(canvas, points, description, center) {
+  public static drawLine(canvas: Canvas, points, description, center) {
     let line = canvas.newLine();
     line.shadowColor = null;
     line.points = points;
@@ -427,8 +427,8 @@ class Common {
   /**
    * 获取正向连接的图形，忽略反向连接的。
    *
-   * @param {Graphic[]} source 源始图形集合
-   * @param {Graphic[]} target 目标图形集合
+   * @param source 源始图形集合
+   * @param target 目标图形集合
    */
   public static addConnected(source, target) {
     console.info(`addConnected. target.length=${target.length}`);
@@ -449,7 +449,7 @@ class Common {
   /**
    * 高亮选中及连接的图形。
    *
-   * @param {Graphic[]} graphics 图形集合
+   * @param graphics 图形集合
    */
   public static highlightConnected(graphics) {
     console.info(`highlightConnected. graphics.length=${graphics.length}`);
@@ -490,6 +490,45 @@ class Common {
       });
   }
 
+  public static move(graphic: Graphic, distance: Point = new Point(0, 30)) {
+    graphic instanceof Line
+      ? this.moveLine(graphic, distance)
+      : this.moveSolid(graphic as Solid, distance)
+  }
+
+  public static moveLine(line: Line, distance: Point) {
+    console.debug(`move line by ${distance}`);
+    line.points = line.points.map(item => item.add(distance));
+    line.head = null;
+    line.tail = null;
+  }
+
+  public static moveSolid(solid: Solid, distance: Point) {
+    console.debug(`move solid by ${distance}`);
+    solid.geometry = solid.geometry.offsetBy(distance.x, distance.y);
+  }
+
+  /** TODO 删除元素很慢 */
+  public static clearLayer(layer: Layer, limit: number = 1) {
+    return layer.graphics.length <= limit
+      ? Common.clearLayerByRemoveGraphics(layer)
+      : Common.clearLayerByRebuildLayer(layer);
+  }
+
+  public static clearLayerByRemoveGraphics(layer: Layer) {
+    layer.graphics.forEach(item => item.remove());
+    return layer;
+  }
+
+  public static clearLayerByRebuildLayer(layer: Layer) {
+    if (layer.graphics.length === 0) return layer;
+    let name = layer.name;
+    layer.remove();
+    layer = Common.canvas().newLayer();
+    layer.name = name;
+    return layer;
+  }
+
   public static test() {
     console.info("PeaceTable: ", Object.PeaceTable);
   }
@@ -498,9 +537,10 @@ class Common {
 
 /** 索引切换者。*/
 class IndexSwitcher {
-  public start: number;
-  public end: number;
+  public start: number;// include
+  public end: number;// exclude
   public current: number;
+  private step: number = 1;
 
   constructor(start: number = 0, end: number = 10, current: number = 0) {
     this.start = start;
@@ -508,16 +548,269 @@ class IndexSwitcher {
     this.current = current;
   }
 
+  public isStart() {
+    return this.current === this.start;
+  }
+
+  public isEnd() {
+    return this.current === this.end - 1;
+  }
+
   public prev() {
-    console.info("IndexSwitcher.prev");
-    this.current = this.current <= this.start ? this.end : this.current - 1;
+    console.debug("IndexSwitcher.prev");
+    this.current = this.isStart() ? this.end : this.current - this.step;
     return this.current;
   }
 
   public next() {
-    console.info("IndexSwitcher.next");
-    this.current = this.current >= this.end ? this.start : this.current + 1;
+    console.debug("IndexSwitcher.next");
+    this.current = this.isEnd() ? this.start : this.current + this.step;
     return this.current;
+  }
+}
+
+
+/** 步进器上下文 */
+class StepperContext implements Record<string, any> {
+  public stepper: Stepper;
+  /**单独使用一个图层绘制元素*/
+  public layer: Layer;
+  /**图形缓存，提供 key 共享访问*/
+  private graphics: Record<string, Graphic> = {};
+  /**不需要访问的图形，自动使用内部索引*/
+  private graphicIndex: number = 0;
+
+  public addGraphic(graphic: Graphic, key?: string) {
+    //删除已存在的图形
+    if (key && key in this.graphics) this.graphics[key].remove();
+    graphic.layer = this.layer;
+    this.graphics[key || this.graphicIndex++] = graphic;
+  }
+
+  public getGraphic<T extends Graphic>(key: string): T {
+    return this.graphics[key] as T;
+  }
+
+  public clear() {
+    console.info(`StepperContext.clear: ${Object.keys(this.layer.graphics).length}`);
+    this.layer = Common.clearLayer(this.layer, 100);
+    Object.keys(this.graphics).forEach(key => delete this.graphics[key]);
+    return this;
+  }
+
+}
+
+/** 步进器处理器 */
+type StepperHandler = (ctx: StepperContext) => any;
+
+/**
+ * 步进器。
+ */
+class Stepper {
+
+  public static steppers: Record<string, Stepper> = {};
+  public static ctxNameKey: string = "stepper.ctx";
+  public static ctxNameValue: string = "Make";
+  public static layerName: string = "stepper";
+
+  /** 有多少步，每步执行哪些动作 */
+  public settings: StepperHandler[][] = [];
+  /** 控制执行到哪一步 */
+  public indexSwitcher: IndexSwitcher;
+  /** 执行过程中，动作使用的共享上下文信息 */
+  public context: StepperContext;
+
+  public static switch(graphic?: Graphic) {
+    console.info("static Stepper.switch");
+    let canvasName = Common.canvas().name;
+    console.debug(`canvasName: ${canvasName}`);
+    let stepper = Stepper.steppers[canvasName];
+    console.debug(`stepper: ${stepper}`);
+    // shift 强制重新配置
+    if (app.shiftKeyDown || !stepper) {
+      if (stepper) stepper.context.clear();
+      let ctxName = this.ctxNameValue;
+      graphic && (ctxName = graphic.userData[this.ctxNameKey]);
+      return Stepper.steppers[canvasName] = Stepper.init(ctxName);
+    }
+    stepper.switch();
+  }
+
+  public static init(ctxName: string) {
+    console.info(`static Stepper.init: ${ctxName}`);
+    let stepper = new Stepper();
+    stepper.context = new StepperContext();
+    stepper.context.stepper = stepper;
+    stepper.context.layer = this.getLayer();
+    // see Make.setup
+    eval(ctxName).setup(stepper);
+    stepper.indexSwitcher = new IndexSwitcher(0, stepper.settings.length);
+    stepper.invoke();
+    return stepper;
+  }
+
+  public static getLayer() {
+    let layer = Common.canvas().layers.find(layer => layer.name === this.layerName);
+    if (!layer) {
+      layer = Common.canvas().newLayer();
+      layer.name = this.layerName;
+    }
+    return layer;
+  }
+
+  public switch() {
+    console.info("Stepper.switch");
+    this.invoke(app.optionKeyDown ? this.indexSwitcher.prev() : this.indexSwitcher.next());
+  }
+
+  public invoke(index: number = this.indexSwitcher.current) {
+    console.info(`Stepper.invoke. index: ${index}`);
+    this.settings[index].forEach(handler => handler(this.context));
+  }
+
+  public autoSwitch(interval: number = 1) {
+    this.switch();
+    if (this.indexSwitcher.isEnd()) return;
+    Timer.once(interval, () => this.autoSwitch());
+  }
+
+  public static clear(ctx: StepperContext) {
+    ctx.clear();
+  }
+
+  public static next(ctx: StepperContext) {
+    ctx.stepper.switch();
+  }
+
+}
+
+class MakeStepperContext extends StepperContext {
+  public refer: Solid;
+  public origin: Point;
+  public lineHeight: number;
+}
+
+class Make {
+
+  public static linePointerWidth: number = 100;
+  public static contentOffset: number = 100;
+  public static referName: string = "case";
+
+  public static linePointer: string = "linePointer";
+  public static immediate: string = "immediate";
+  public static value1: string = "value1";
+  public static immediateLine: string = "immediateLine";
+  public static deferred: string = "deferred";
+  public static deferredLine: string = "deferredLine";
+  public static immediate2: string = "immediate2";
+  public static immediate2Line: string = "immediate2Line";
+  public static value2: string = "value2";
+  public static value3: string = "value3";
+
+  public static setup(stepper: Stepper) {
+    console.info("Make.setup");
+    let context = stepper.context as MakeStepperContext;
+    context.refer = (Common.selectedGraphic() || Common.canvas().graphicWithName(Make.referName)) as Solid;
+    context.origin = context.refer.geometry.origin.add(new Point(context.refer.geometry.width, 0));
+    context.lineHeight = Make.calLineHeight(context.refer);
+    console.debug(`context: ${context}`);
+
+    let moveStep1: StepperHandler = Make.moveLinePointer;
+    let moveStep2: StepperHandler = Make.buildMoveLinePointer(2);
+    let moveStep3: StepperHandler = Make.buildMoveLinePointer(3.5);
+    let moveStep5: StepperHandler = Make.buildMoveLinePointer(7);
+    let moveStep_10: StepperHandler = Make.buildMoveLinePointer(-10);
+
+    let settings: StepperHandler[][] = [];
+    settings.push([Stepper.clear, Stepper.next]);
+    settings.push([Make.newLinePointer]);
+    settings.push([moveStep1, Make.newImmediate]);
+    settings.push([moveStep1, Make.newDeferred]);
+    settings.push([moveStep1, Make.newImmediate2]);
+    settings.push([moveStep1, Make.immediateAssign2]);
+    settings.push([moveStep1, ctx => Make.drawText(ctx, "phases.1:")]);
+    settings.push([moveStep2, ctx => Make.drawText(ctx, "phases.2:")]);
+    settings.push([moveStep2, ctx => Make.drawText(ctx, "phases.case: phases.1 phases.2")]);
+    settings.push([moveStep5, Make.immediateAssign3]);
+    settings.push([moveStep_10, ctx => Make.drawText(ctx, "  phases.1")]);
+    settings.push([moveStep2, ctx => Make.drawText(ctx, "   phases.2")]);
+    settings.push([moveStep3, ctx => Make.drawText(ctx, "   phases.1 phases.2")]);
+    settings.push([moveStep1, ctx => Make.drawText(ctx, "   phases.immediate: 3")]);
+    settings.push([moveStep1, ctx => Make.drawText(ctx, "   phases.immediate2: 1")]);
+    settings.push([moveStep1, ctx => Make.drawText(ctx, "   phases.deferred: 3")]);
+    stepper.settings = settings;
+  }
+
+  public static calLineHeight(graphic: Solid) {
+    let lineCount = graphic.text.split("\n").length;
+    let totalLineHeight = graphic.geometry.height - graphic.textVerticalPadding * 2;
+    return totalLineHeight / lineCount;
+  }
+
+  public static newLinePointer(ctx: MakeStepperContext) {
+    console.info("static Make.newLinePointer");
+    let line = Common.canvas().newLine();
+    let start = ctx.origin.add(new Point(-100, ctx.refer.textVerticalPadding + ctx.lineHeight / 2 + ctx.lineHeight * 2));
+    line.points = [start, start.subtract(new Point(Make.linePointerWidth, 0))];
+    line.headType = "FilledArrow";
+    ctx.addGraphic(line, Make.linePointer);
+  }
+
+
+  public static moveLinePointer(ctx: MakeStepperContext, stepCount: number = 1) {
+    Common.moveLine(ctx.getGraphic(Make.linePointer), new Point(0, ctx.lineHeight * stepCount));
+  }
+
+  public static buildMoveLinePointer(stepCount: number = 1) {
+    return (ctx: MakeStepperContext) => Make.moveLinePointer(ctx, stepCount);
+  }
+
+  public static currentContentPoint(ctx: StepperContext) {
+    let linePointer = ctx.getGraphic<Line>(Make.linePointer);
+    return new Point((ctx as MakeStepperContext).origin.x + Make.contentOffset, linePointer.points[0].y);
+  }
+
+  public static drawText(ctx: StepperContext, text: string, key?: string, offset?: Point) {
+    let point = Make.currentContentPoint(ctx);
+    if (offset) point = point.add(offset);
+    let solid = Common.canvas().addText(text, point);
+    solid.textSize = 12;
+    ctx.addGraphic(solid, key);
+    return solid;
+  }
+
+  public static connect(ctx: StepperContext, head: Solid, tail: Solid, key?: string) {
+    let line = Common.canvas().connect(head, tail);
+    line.headType = "FilledArrow";
+    ctx.addGraphic(line, key);
+    return line;
+  }
+
+  public static newImmediate(ctx: StepperContext) {
+    console.info("static Make.newImmediate");
+    let immediate = Make.drawText(ctx, "phases.immediate", Make.immediate);
+    let value1 = Make.drawText(ctx, "1", Make.value1, new Point(150, 0));
+    Make.connect(ctx, immediate, value1, Make.immediateLine);
+  }
+
+  public static newDeferred(ctx: StepperContext) {
+    let deferred = Make.drawText(ctx, "phases.deferred", Make.deferred, new Point(-50, 0));
+    Make.connect(ctx, deferred, ctx.getGraphic<Solid>(Make.immediate), Make.deferredLine);
+  }
+
+  public static newImmediate2(ctx: StepperContext) {
+    let immediate2 = Make.drawText(ctx, "phases.immediate2", Make.immediate2);
+    Make.connect(ctx, immediate2, ctx.getGraphic<Solid>(Make.value1), Make.immediate2Line);
+  }
+
+  public static immediateAssign2(ctx: StepperContext) {
+    let value2 = Make.drawText(ctx, "2", Make.value2, new Point(150, 0));
+    Make.connect(ctx, ctx.getGraphic<Solid>(Make.immediate), value2, Make.immediateLine);
+  }
+
+  public static immediateAssign3(ctx: StepperContext) {
+    let value3 = Make.drawText(ctx, "3", Make.value3, new Point(150, 0));
+    Make.connect(ctx, ctx.getGraphic<Solid>(Make.immediate), value3, Make.immediateLine);
   }
 }
 
@@ -540,8 +833,8 @@ class LayerSwitcher {
   /**图形自定义设置键*/
   public static layerCustomSettingsKey: string = "layer-custom-settings";
   public static layerNamePrefix: string = "layer";
-  public static layerSwitchMode: LayerSwitchMode = LayerSwitchMode.rotate;
-  public static layerCustomSettings: number[][] = [[]];
+  public static layerSwitchMode: LayerSwitchMode = LayerSwitchMode.increase;
+  public static layerCustomSettings: number[][] = [[0]];
   public static layerArguments: Record<string, any> = {
     [LayerSwitcher.layerNamePrefixKey]: LayerSwitcher.layerNamePrefix,
     [LayerSwitcher.layerSwitchModeKey]: LayerSwitcher.layerSwitchMode,
@@ -560,7 +853,7 @@ class LayerSwitcher {
 
   /**
    * 切换图层。
-   * @param  [graphic] 图形，该图形上记录着图层切换参数
+   * @param [graphic] 图形，该图形上记录着图层切换参数
    */
   public static switch(graphic?: Graphic) {
     console.info("static LayerSwitcher.switch");
@@ -575,6 +868,7 @@ class LayerSwitcher {
   public static switchByForm() {
     console.info("static LayerSwitcher.switchByForm");
     let canvasName = Common.canvas().name;
+    console.debug(`canvasName: ${canvasName}`);
     let layerSwitcher = LayerSwitcher.layerSwitchers[canvasName];
     console.debug(`layerSwitcher: ${layerSwitcher}`);
     // shift 强制重新配置
@@ -587,9 +881,10 @@ class LayerSwitcher {
         .then(response => {
           let values = response.values;
           LayerSwitcher.layerSwitchers[canvasName] = LayerSwitcher.init(
-            values[this.layerNamePrefixKey], values[this.layerSwitchModeKey], values[this.layerCustomSettingsKey],
+            values[this.layerNamePrefixKey], values[this.layerSwitchModeKey], JSON.parse(values[this.layerCustomSettingsKey]),
           );
-        });
+        })
+        .catch(response => console.error("error:", response));
     }
 
     layerSwitcher.switch();
@@ -598,18 +893,18 @@ class LayerSwitcher {
   /**
    * 切换图层通过图形参数。
    *
-   * @param  graphic 图形，该图形上记录着图层切换参数
+   * @param graphic 图形，该图形上记录着图层切换参数
    */
   public static switchByGraphic(graphic: Graphic) {
     console.info("static LayerSwitcher.switchByGraphic");
     let layerSwitcher = LayerSwitcher.layerSwitchers[graphic.name];
     console.debug(`layerSwitcher: ${layerSwitcher}`);
     if (app.shiftKeyDown || !layerSwitcher) {
-      let layerNamePrefix = graphic.userData[this.layerNamePrefixKey] || this.layerNamePrefix;
-      let layerSwitchMode = LayerSwitchMode[graphic.userData[this.layerSwitchModeKey]] || this.layerSwitchMode;
-      let layerCustomSettings = graphic.userData[this.layerCustomSettingsKey] || this.layerCustomSettings;
+      let layerNamePrefix = graphic.userData[this.layerNamePrefixKey];
+      let layerSwitchMode = LayerSwitchMode[graphic.userData[this.layerSwitchModeKey]];
+      let layerCustomSettings = graphic.userData[this.layerCustomSettingsKey];
       return this.layerSwitchers[graphic.name] = LayerSwitcher.init(
-        layerNamePrefix, layerSwitchMode, layerCustomSettings
+        layerNamePrefix, layerSwitchMode as any, layerCustomSettings
       );
     }
 
@@ -618,12 +913,12 @@ class LayerSwitcher {
 
   public static init(layerNamePrefix: string = LayerSwitcher.layerNamePrefix,
                      layerSwitchMode = LayerSwitchMode.rotate,
-                     layerCustomSettings?: number[][]): LayerSwitcher {
+                     layerCustomSettings: number[][]): LayerSwitcher {
     console.info("static LayerSwitcher.init");
     console.debug(`layerNamePrefix: ${layerNamePrefix}, layerSwitchMode: ${layerSwitchMode}`);
     let layerSwitcher = new LayerSwitcher();
     // 图层顺序：底部的图层排在前面，顶上的图层排在后面
-    layerSwitcher.layers = Common.canvas().layers.filter(layer => layer.name.startsWith(layerNamePrefix)).reverse()
+    layerSwitcher.layers = Common.canvas().layers.filter(layer => layer.name.startsWith(layerNamePrefix)).reverse();
     if (layerSwitchMode == LayerSwitchMode.rotate) {
       layerSwitcher.settings = layerSwitcher.layers.map((layer, index) => [index]);
     } else if (layerSwitchMode == LayerSwitchMode.increase) {
@@ -631,25 +926,28 @@ class LayerSwitcher {
     } else {
       layerSwitcher.settings = layerCustomSettings;
     }
-    layerSwitcher.settings.unshift([]);
-    console.debug(`layerSwitcher.settings: ${JSON.stringify(layerSwitcher.settings)}`);
+    layerSwitcher.settings.unshift([]);//最初不显示任何图层
+    console.debug(`settings: ${JSON.stringify(layerSwitcher.settings)}`);
     layerSwitcher.indexSwitcher = new IndexSwitcher(0, layerSwitcher.layers.length);
     layerSwitcher.show();
     return layerSwitcher;
   }
 
+  public switch() {
+    console.info("LayerSwitcher.switch");
+    this.show(app.optionKeyDown ? this.indexSwitcher.prev() : this.indexSwitcher.next());
+  }
+
   public show(index: number = this.indexSwitcher.current) {
     this.hiddenAll();
-    index in this.settings && this.settings[index].forEach(item => this.layers[item].visible = true)
+    index in this.settings
+    && this.settings[index]
+      .filter(item => item in this.layers)
+      .forEach(item => this.layers[item].visible = true);
   }
 
   private hiddenAll() {
     for (let layer of this.layers) layer.visible = false;
-  }
-
-  public switch() {
-    console.info("LayerSwitcher.switch");
-    this.show(app.optionKeyDown ? this.indexSwitcher.prev() : this.indexSwitcher.next());
   }
 }
 
@@ -728,7 +1026,7 @@ class PeaceTable {
    * @return 形状
    */
   public drawColumn(canvas: Canvas, origin: Point, texts: string[]): Group {
-    console.info("drawColumn: ", texts.length);
+    console.info(`drawColumn: ${texts.length}`);
     let increase = new Point(0, this.cellSize.height);
     return new Group(texts.map((text, index) => {
       return this.drawCell(canvas, index === 0 ? origin : origin = origin.add(increase), text);
@@ -797,15 +1095,16 @@ class PeaceTable {
   }
 
   public static extractSolidText(solid: Solid): string {
-    console.debug("extractSolidText: ", solid.text);
+    console.debug(`extractSolidText: ${solid.text}`);
     return solid.text;
   }
 }
 
 (() => {
   let library = new PlugIn.Library(new Version("0.1"));
-  library.Common = Common;
-  library.LayerSwitcher = LayerSwitcher;
+  library["Common"] = Common;
+  library["Stepper"] = Stepper;
+  library["LayerSwitcher"] = LayerSwitcher;
 
   //因为不能直接在 library 上添加属性，所以将属性都定义在 dynamic 中
   library.dynamic = {
@@ -839,7 +1138,7 @@ class PeaceTable {
   /**
    * 设置绘图样式。
    *
-   * @param  style 绘图样式：large、small
+   * @param style 绘图样式：large、small
    * @return {void}
    */
   library.setStyle = function (style) {
@@ -867,7 +1166,7 @@ class PeaceTable {
   /**
    * 绘制抽象的虚拟内存。
    *
-   * @param  [canvas] 画布
+   * @param [canvas] 画布
    * @param {Point} [origin] 起点
    * @return  虚拟内存图
    */
@@ -888,7 +1187,7 @@ class PeaceTable {
   library.drawTableColumn = function (canvas: Canvas, origin: Point) {
     console.info("drawTableColumn");
     let locationKey = "drawTableColumn.location";
-    Common.readFileContentForGraphic(canvas, locationKey)
+    Common.readFileContentAssociatively(canvas, locationKey)
       .then(response => JSON.parse(response.data))
       .then(response => PeaceTable.small.drawColumn(canvas, origin, response))
       .catch(response => console.error("drawMemoryAbstractly error: ", response))
@@ -897,7 +1196,7 @@ class PeaceTable {
   /**
    * 绘制抽象的虚拟内存。
    *
-   * @param  [canvas] 画布
+   * @param [canvas] 画布
    * @param {Point} [origin] 起点
    * @return  虚拟内存图
    */
@@ -944,7 +1243,7 @@ class PeaceTable {
   /**
    * 绘制虚拟内存单元，抽象地。
    *
-   * @param  canvas 画布
+   * @param canvas 画布
    * @param {Point} origin 起点，矩形左下角处位置
    * @param {String[]} descriptions 内存块描述集合
    * @return  虚拟内存单元图
@@ -966,7 +1265,7 @@ class PeaceTable {
   /**
    * 绘制栈区抽象虚拟内存。案例参考：variable.stack.json。
    *
-   * @param  [canvas] 画布
+   * @param [canvas] 画布
    * @param {Point} [origin] 起点
    */
   library.drawStackMemoryAbstractly = function (canvas, origin) {
@@ -1037,10 +1336,10 @@ class PeaceTable {
   /**
    * 基于内存映射，绘制虚拟内存。
    *
-   * @param  [canvas] 画布
+   * @param [canvas] 画布
    * @param {Point} [origin] 起点
-   * @param  [content] 内容
-   * @param  [location] 内容
+   * @param [content] 内容
+   * @param [location] 内容
    * @return  虚拟内存图
    */
   library.drawMemoryForMaps = function (canvas, origin, content, location) {
@@ -1075,7 +1374,7 @@ class PeaceTable {
   /**
    * 解析内存映射。
    *
-   * @param  content 内存映射内容
+   * @param content 内存映射内容
    * @return {MemoryBlock[]} 内存块
    */
   library.resolveMaps = function (content) {
@@ -1147,7 +1446,7 @@ class PeaceTable {
   /**
    * 绘制虚拟内存单元，从下往上绘制。
    *
-   * @param  canvas 画布
+   * @param canvas 画布
    * @param {Point} origin 起点，矩形的左下点
    * @param {MemoryBlock[]} blocks 内存块集合
    * @return  绘制的图形
@@ -1174,7 +1473,7 @@ class PeaceTable {
   /**
    * 绘制虚拟内存单元，从下往上绘制。
    *
-   * @param  canvas 画布
+   * @param canvas 画布
    * @param {Point} startPoint 起点，矩形左下角处位置
    * @param {MemoryBlock} block 内存块
    * @return  绘制的图形
@@ -1198,9 +1497,9 @@ class PeaceTable {
   /**
    * 绘制内存矩形。
    *
-   * @param  canvas 画布
+   * @param canvas 画布
    * @param {Point} location 位置
-   * @param  [description] 描述
+   * @param [description] 描述
    * @return {Shape} 绘制的图形
    */
   library.drawMemoryRect = function (canvas, location, description) {
@@ -1220,7 +1519,7 @@ class PeaceTable {
   /**
    * 绘制虚拟内存单元地址。
    *
-   * @param  canvas 画布
+   * @param canvas 画布
    * @param {Point} origin 起点
    * @param {Number|BigInt} address 地址
    * @return {Group} 绘制的图形
@@ -1267,7 +1566,7 @@ class PeaceTable {
   /**
    * 绘制内存空间尺寸。
    *
-   * @param  canvas 画布
+   * @param canvas 画布
    * @param {Point} location 位置
    * @param {Number} size 空间尺寸
    * @return {Group} 绘制的图形

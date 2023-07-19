@@ -187,6 +187,7 @@ declare class Console {
     log(message: Object, additional?: Array<Object | null>);
     error(message: Object, additional?: Array<Object | null>);
     info(message: Object, additional?: Array<Object | null>);
+    debug(message: Object, additional?: Array<Object | null>);
     warn(message: Object, additional?: Array<Object | null>);
     clear();
 }
@@ -310,6 +311,8 @@ declare class GraffleDocument extends Document {
     readonly portfolio: Portfolio;
     readonly windows: Array<NSWindow>;
 }
+
+declare var document: GraffleDocument;
 
 // Email
 

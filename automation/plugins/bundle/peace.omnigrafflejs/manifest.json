@@ -5,6 +5,10 @@
   "author": "peace",
   "actions": [
     {
+      "image": "images/icon.png",
+      "identifier": "stepper_switch"
+    },
+    {
       "image": "icon.png",
       "identifier": "table_extract"
     },
@@ -47,6 +51,10 @@
     {
       "image": "icon.png",
       "identifier": "graphic_lighlight"
+    },
+    {
+      "image": "icon.png",
+      "identifier": "graphic_line_number"
     }
   ],
   "libraries": [

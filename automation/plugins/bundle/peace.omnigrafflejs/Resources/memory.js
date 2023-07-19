@@ -1,19 +1,35 @@
-var _a;
 /**
  * 虚拟内存：
  * 抽象虚拟内存：没有虚拟地址或者虚拟地址是不真实的
  * 具体虚拟内存：虚拟地址是真实的
  * 程序运行起来才能得到具体虚拟地址，否则就使用抽象的方法分析虚拟内存。
+ * PlugIn.find("com.github.peacetrue.learn.graffle").library("common").canvas()
  */
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = function (d, b) {
+        extendStatics = Object.setPrototypeOf ||
+            ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+            function (d, b) { for (var p in b) if (Object.prototype.hasOwnProperty.call(b, p)) d[p] = b[p]; };
+        return extendStatics(d, b);
+    };
+    return function (d, b) {
+        if (typeof b !== "function" && b !== null)
+            throw new TypeError("Class extends value " + String(b) + " is not a constructor or null");
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+var _a;
 var Common = /** @class */ (function () {
     function Common() {
     }
     /**
      * 操作选项。
      *
-     * @param  object
-     * @param  key
-     * @param  [value]
+     * @param object
+     * @param key
+     * @param [value]
      * @return
      */
     Common.option = function (object, key, value) {
@@ -30,9 +46,9 @@ var Common = /** @class */ (function () {
     /**
      * 操作 canvas 选项。
      *
-     * @param  canvas
-     * @param  key
-     * @param  [value]
+     * @param canvas
+     * @param key
+     * @param [value]
      * @return
      */
     Common.canvasOption = function (canvas, key, value) {
@@ -44,12 +60,7 @@ var Common = /** @class */ (function () {
         }
         return value === undefined ? options[key] : (options[key] = value);
     };
-    /**
-     * URL.fetch to Promise。
-     *
-     * @param {URL} url url
-     * @return {Promise} URL.fetch(Data)
-     */
+    /** URL.fetch to Promise。*/
     Common.promiseUrlFetch = function (url) {
         return new Promise(function (resolve, reject) {
             url.fetch(function (response) { return resolve({ url: url, data: response.toString() }); }, function (response) { return reject(response); });
@@ -58,34 +69,26 @@ var Common = /** @class */ (function () {
     Common.promise = function (data) {
         return new Promise(function (resolve, reject) { return resolve(data); });
     };
-    Common.document = function () {
-        return document;
+    /** 获取当前选中对象。*/
+    Common.selection = function () {
+        return document.windows[0].selection;
     };
-    /**
-     * 获取当前选中的画布。
-     *
-     * PlugIn.find("com.github.peacetrue.learn.graffle").library("common").canvas()
-     *
-     * @return
-     */
+    /** 获取当前选中的画布。*/
     Common.canvas = function () {
-        return this.document().windows[0].selection.canvas;
+        return this.selection().canvas;
     };
+    /** 获取当前选中的第一个元素。*/
     Common.selectedGraphic = function () {
-        return this.document().windows[0].selection.graphics[0];
+        return this.selection().graphics[0];
     };
-    /**
-     * 获取当前窗口中心点。
-     *
-     * @return {Point}
-     */
+    /** 获取当前窗口中心点。*/
     Common.windowCenterPoint = function () {
-        return this.document().windows[0].centerVisiblePoint;
+        return document.windows[0].centerVisiblePoint;
     };
     /**
      * 选择文件。
      *
-     * @param  [types] 文件类型集合
+     * @param [types] 文件类型集合
      * @return
      */
     Common.selectFile = function (types) {
@@ -99,15 +102,14 @@ var Common = /** @class */ (function () {
         });
     };
     /**
-     * 为图形选择文件。选择文件后，记录下文件位置。
+     * 选择文件后，记录下文件位置。
      *
-     * @param  object 图形
-     * @param  locationKey 位置键
-     * @return {Promise} URL.fetch(Data)
+     * @param object 关联对象
+     * @param locationKey 位置键
      */
-    Common.selectFileForGraphic = function (object, locationKey) {
+    Common.selectFileAssociatively = function (object, locationKey) {
         var _this = this;
-        console.info("selectFileForGraphic");
+        console.info("selectFileAssociatively");
         return this.selectFile().then(function (response) {
             _this.option(object, locationKey, response.url.toString());
             return response;
@@ -116,24 +118,22 @@ var Common = /** @class */ (function () {
     /**
      * 读取文件内容。
      *
-     * @param  location 文件位置
-     * @return {Promise}
+     * @param location 文件位置
      */
     Common.readFileContent = function (location) {
         !location.startsWith('file:') && (location = "file://".concat(location));
         return this.promiseUrlFetch(URL.fromString(location));
     };
     /**
-     * 从图形中读取文件内容。
+     * 从关联对象中读取文件内容。
      *
-     * @param  object 图形
-     * @param  locationKey 文件位置键
-     * @return {Promise} URL.fetch(Data)
+     * @param object 关联对象
+     * @param locationKey 文件位置键
      */
-    Common.readFileContentForGraphic = function (object, locationKey) {
+    Common.readFileContentAssociatively = function (object, locationKey) {
         var _this = this;
-        console.info("readFileContentForGraphic");
-        console.debug("app.optionKeyDown: ", app.optionKeyDown);
+        console.info("readFileContentAssociatively");
+        console.debug("app.optionKeyDown: ".concat(app.optionKeyDown));
         if (app.optionKeyDown) {
             this.option(object, locationKey, null);
             return Promise.reject("clear cache!");
@@ -141,54 +141,54 @@ var Common = /** @class */ (function () {
         var location = this.option(object, locationKey);
         console.info("location: ", location);
         if (!location)
-            return this.selectFileForGraphic(object, locationKey);
+            return this.selectFileAssociatively(object, locationKey);
         return this.readFileContent(location).catch(function (response) {
             // response:  Error: 未能完成操作。（kCFErrorDomainCFNetwork错误1。）
             console.error("promiseUrlFetch response: ", response);
-            return _this.selectFileForGraphic(object, locationKey);
+            return _this.selectFileAssociatively(object, locationKey);
         });
     };
     /**
      * 从文件读取内容后设置到图形中。
      * 文件内容过多，可分开显示到多个图形中。
      *
-     * @param {Graphic[]} graphics 图形集合
-     * @param  locationKey 位置键
-     * @param {int} [length] 图形数目
-     * @return {Promise}
+     * @param graphics 图形集合
+     * @param locationKey 位置键
+     * @param [length] 图形数目
      */
     Common.loadGraphicsText = function (graphics, locationKey, length) {
         var _this = this;
-        console.info("loadGraphicsText graphics.length: ", graphics.length);
+        console.info("loadGraphicsText");
+        console.debug("graphics.length: ".concat(graphics.length));
         var graphic = graphics[0];
         length = length || graphic.userData['length'] || 1;
-        return this.readFileContentForGraphic(graphic, locationKey)
+        return this.readFileContentAssociatively(graphic, locationKey)
             .then(function (response) {
             var canvas = _this.canvas();
             var location = graphic.userData[locationKey];
             graphics = canvas.allGraphicsWithUserDataForKey(location, locationKey);
-            console.info("allGraphicsWithUserDataForKey.length: ", graphics.length);
+            console.info("allGraphicsWithUserDataForKey.length: ".concat(graphics.length));
             if (graphics.length < length)
                 graphics = _this.duplicateGraphicToLayers(canvas, graphic, length);
             _this.setGraphicsText(graphics, response.data);
             return response;
         })
             .catch(function (response) {
-            console.error("readFileContentForGraphic response: ", response);
+            console.error("loadGraphicsText response: ", response);
         });
     };
     /**
      * 将内容拆分后均匀分摊到图形集合。
      *
-     * @param {Graphic[]} graphics 图形集合
-     * @param  content 文本内容
-     * @return {void}
+     * @param graphics 图形集合
+     * @param text 文本内容
      */
-    Common.setGraphicsText = function (graphics, content) {
+    Common.setGraphicsText = function (graphics, text) {
         console.info("setGraphicsText");
-        if (graphics.length === 1)
-            return graphics[0].text = content;
-        var lines = content.split("\n");
+        if (graphics.length === 1) {
+            return graphics[0].text = text;
+        }
+        var lines = text.split("\n");
         var lineCountPerGraphic = lines.length / graphics.length;
         var index = 0;
         for (var _i = 0, graphics_1 = graphics; _i < graphics_1.length; _i++) {
@@ -200,11 +200,24 @@ var Common = /** @class */ (function () {
         }
     };
     /**
+     * 设置图形内容为行号。
+     *
+     * @param graphic 图形
+     * @param lineCountKey 行数键
+     * @param lineCountValue 行数值
+     */
+    Common.setGraphicLineNumber = function (graphic, lineCountKey, lineCountValue) {
+        if (lineCountKey === void 0) { lineCountKey = "line.count"; }
+        if (lineCountValue === void 0) { lineCountValue = 10; }
+        lineCountValue = graphic.userData[lineCountKey] || lineCountValue;
+        graphic.text = Array.from({ length: lineCountValue }, function (_, i) { return i + 1; }).join("\n");
+    };
+    /**
      * 复制图形到一个新创建的图层中。
      * 图层命名为：layer-0、layer-1。
      *
-     * @param  canvas 画布
-     * @param  graphic 图形
+     * @param canvas 画布
+     * @param graphic 图形
      * @param {int} length 图形数目
      * @return {void}
      */
@@ -233,7 +246,7 @@ var Common = /** @class */ (function () {
     /**
      * 清除图形内的文本。
      *
-     * @param {Graphic[]} graphics  图形
+     * @param graphics  图形
      */
     Common.clearGraphicsText = function (graphics) {
         var _this = this;
@@ -251,7 +264,7 @@ var Common = /** @class */ (function () {
      * 获取矩形指定位置处的点。方位顺序：上下左右，top-left。
      *
      * @param {Rect} rect 矩形
-     * @param  location 位置，top、middle、bottom、left、center、right
+     * @param location 位置，top、middle、bottom、left、center、right
      * @return {Point} 点
      */
     Common.pointOfRect = function (rect, location) {
@@ -301,9 +314,9 @@ var Common = /** @class */ (function () {
     /**
      * 绘线，并在线上添加描述。
      *
-     * @param  canvas 画布
+     * @param canvas 画布
      * @param {Point[]} points 起止点集合
-     * @param  [description] 描述
+     * @param [description] 描述
      * @param {Boolean} [center] 默认在起点处绘制文本，true 在中点处绘制文本
      * @return  线（或带文本）
      */
@@ -401,8 +414,8 @@ var Common = /** @class */ (function () {
     /**
      * 获取正向连接的图形，忽略反向连接的。
      *
-     * @param {Graphic[]} source 源始图形集合
-     * @param {Graphic[]} target 目标图形集合
+     * @param source 源始图形集合
+     * @param target 目标图形集合
      */
     Common.addConnected = function (source, target) {
         var _this = this;
@@ -425,7 +438,7 @@ var Common = /** @class */ (function () {
     /**
      * 高亮选中及连接的图形。
      *
-     * @param {Graphic[]} graphics 图形集合
+     * @param graphics 图形集合
      */
     Common.highlightConnected = function (graphics) {
         console.info("highlightConnected. graphics.length=".concat(graphics.length));
@@ -465,6 +478,42 @@ var Common = /** @class */ (function () {
             return Object[name];
         });
     };
+    Common.move = function (graphic, distance) {
+        if (distance === void 0) { distance = new Point(0, 30); }
+        graphic instanceof Line
+            ? this.moveLine(graphic, distance)
+            : this.moveSolid(graphic, distance);
+    };
+    Common.moveLine = function (line, distance) {
+        console.debug("move line by ".concat(distance));
+        line.points = line.points.map(function (item) { return item.add(distance); });
+        line.head = null;
+        line.tail = null;
+    };
+    Common.moveSolid = function (solid, distance) {
+        console.debug("move solid by ".concat(distance));
+        solid.geometry = solid.geometry.offsetBy(distance.x, distance.y);
+    };
+    /** TODO 删除元素很慢 */
+    Common.clearLayer = function (layer, limit) {
+        if (limit === void 0) { limit = 1; }
+        return layer.graphics.length <= limit
+            ? Common.clearLayerByRemoveGraphics(layer)
+            : Common.clearLayerByRebuildLayer(layer);
+    };
+    Common.clearLayerByRemoveGraphics = function (layer) {
+        layer.graphics.forEach(function (item) { return item.remove(); });
+        return layer;
+    };
+    Common.clearLayerByRebuildLayer = function (layer) {
+        if (layer.graphics.length === 0)
+            return layer;
+        var name = layer.name;
+        layer.remove();
+        layer = Common.canvas().newLayer();
+        layer.name = name;
+        return layer;
+    };
     Common.test = function () {
         console.info("PeaceTable: ", Object.PeaceTable);
     };
@@ -478,21 +527,248 @@ var IndexSwitcher = /** @class */ (function () {
         if (start === void 0) { start = 0; }
         if (end === void 0) { end = 10; }
         if (current === void 0) { current = 0; }
+        this.step = 1;
         this.start = start;
         this.end = end;
         this.current = current;
     }
+    IndexSwitcher.prototype.isStart = function () {
+        return this.current === this.start;
+    };
+    IndexSwitcher.prototype.isEnd = function () {
+        return this.current === this.end - 1;
+    };
     IndexSwitcher.prototype.prev = function () {
-        console.info("IndexSwitcher.prev");
-        this.current = this.current <= this.start ? this.end : this.current - 1;
+        console.debug("IndexSwitcher.prev");
+        this.current = this.isStart() ? this.end : this.current - this.step;
         return this.current;
     };
     IndexSwitcher.prototype.next = function () {
-        console.info("IndexSwitcher.next");
-        this.current = this.current >= this.end ? this.start : this.current + 1;
+        console.debug("IndexSwitcher.next");
+        this.current = this.isEnd() ? this.start : this.current + this.step;
         return this.current;
     };
     return IndexSwitcher;
+}());
+/** 步进器上下文 */
+var StepperContext = /** @class */ (function () {
+    function StepperContext() {
+        /**图形缓存，提供 key 共享访问*/
+        this.graphics = {};
+        /**不需要访问的图形，自动使用内部索引*/
+        this.graphicIndex = 0;
+    }
+    StepperContext.prototype.addGraphic = function (graphic, key) {
+        //删除已存在的图形
+        if (key && key in this.graphics)
+            this.graphics[key].remove();
+        graphic.layer = this.layer;
+        this.graphics[key || this.graphicIndex++] = graphic;
+    };
+    StepperContext.prototype.getGraphic = function (key) {
+        return this.graphics[key];
+    };
+    StepperContext.prototype.clear = function () {
+        var _this = this;
+        console.info("StepperContext.clear: ".concat(Object.keys(this.layer.graphics).length));
+        this.layer = Common.clearLayer(this.layer, 100);
+        Object.keys(this.graphics).forEach(function (key) { return delete _this.graphics[key]; });
+        return this;
+    };
+    return StepperContext;
+}());
+/**
+ * 步进器。
+ */
+var Stepper = /** @class */ (function () {
+    function Stepper() {
+        /** 有多少步，每步执行哪些动作 */
+        this.settings = [];
+    }
+    Stepper.switch = function (graphic) {
+        console.info("static Stepper.switch");
+        var canvasName = Common.canvas().name;
+        console.debug("canvasName: ".concat(canvasName));
+        var stepper = Stepper.steppers[canvasName];
+        console.debug("stepper: ".concat(stepper));
+        // shift 强制重新配置
+        if (app.shiftKeyDown || !stepper) {
+            if (stepper)
+                stepper.context.clear();
+            var ctxName = this.ctxNameValue;
+            graphic && (ctxName = graphic.userData[this.ctxNameKey]);
+            return Stepper.steppers[canvasName] = Stepper.init(ctxName);
+        }
+        stepper.switch();
+    };
+    Stepper.init = function (ctxName) {
+        console.info("static Stepper.init: ".concat(ctxName));
+        var stepper = new Stepper();
+        stepper.context = new StepperContext();
+        stepper.context.stepper = stepper;
+        stepper.context.layer = this.getLayer();
+        // see Make.setup
+        eval(ctxName).setup(stepper);
+        stepper.indexSwitcher = new IndexSwitcher(0, stepper.settings.length);
+        stepper.invoke();
+        return stepper;
+    };
+    Stepper.getLayer = function () {
+        var _this = this;
+        var layer = Common.canvas().layers.find(function (layer) { return layer.name === _this.layerName; });
+        if (!layer) {
+            layer = Common.canvas().newLayer();
+            layer.name = this.layerName;
+        }
+        return layer;
+    };
+    Stepper.prototype.switch = function () {
+        console.info("Stepper.switch");
+        this.invoke(app.optionKeyDown ? this.indexSwitcher.prev() : this.indexSwitcher.next());
+    };
+    Stepper.prototype.invoke = function (index) {
+        var _this = this;
+        if (index === void 0) { index = this.indexSwitcher.current; }
+        console.info("Stepper.invoke. index: ".concat(index));
+        this.settings[index].forEach(function (handler) { return handler(_this.context); });
+    };
+    Stepper.prototype.autoSwitch = function (interval) {
+        var _this = this;
+        if (interval === void 0) { interval = 1; }
+        this.switch();
+        if (this.indexSwitcher.isEnd())
+            return;
+        Timer.once(interval, function () { return _this.autoSwitch(); });
+    };
+    Stepper.clear = function (ctx) {
+        ctx.clear();
+    };
+    Stepper.next = function (ctx) {
+        ctx.stepper.switch();
+    };
+    Stepper.steppers = {};
+    Stepper.ctxNameKey = "stepper.ctx";
+    Stepper.ctxNameValue = "Make";
+    Stepper.layerName = "stepper";
+    return Stepper;
+}());
+var MakeStepperContext = /** @class */ (function (_super) {
+    __extends(MakeStepperContext, _super);
+    function MakeStepperContext() {
+        return _super !== null && _super.apply(this, arguments) || this;
+    }
+    return MakeStepperContext;
+}(StepperContext));
+var Make = /** @class */ (function () {
+    function Make() {
+    }
+    Make.setup = function (stepper) {
+        console.info("Make.setup");
+        var context = stepper.context;
+        context.refer = (Common.selectedGraphic() || Common.canvas().graphicWithName(Make.referName));
+        context.origin = context.refer.geometry.origin.add(new Point(context.refer.geometry.width, 0));
+        context.lineHeight = Make.calLineHeight(context.refer);
+        console.debug("context: ".concat(context));
+        var moveStep1 = Make.moveLinePointer;
+        var moveStep2 = Make.buildMoveLinePointer(2);
+        var moveStep3 = Make.buildMoveLinePointer(3.5);
+        var moveStep5 = Make.buildMoveLinePointer(7);
+        var moveStep_10 = Make.buildMoveLinePointer(-10);
+        var settings = [];
+        settings.push([Stepper.clear, Stepper.next]);
+        settings.push([Make.newLinePointer]);
+        settings.push([moveStep1, Make.newImmediate]);
+        settings.push([moveStep1, Make.newDeferred]);
+        settings.push([moveStep1, Make.newImmediate2]);
+        settings.push([moveStep1, Make.immediateAssign2]);
+        settings.push([moveStep1, function (ctx) { return Make.drawText(ctx, "phases.1:"); }]);
+        settings.push([moveStep2, function (ctx) { return Make.drawText(ctx, "phases.2:"); }]);
+        settings.push([moveStep2, function (ctx) { return Make.drawText(ctx, "phases.case: phases.1 phases.2"); }]);
+        settings.push([moveStep5, Make.immediateAssign3]);
+        settings.push([moveStep_10, function (ctx) { return Make.drawText(ctx, "  phases.1"); }]);
+        settings.push([moveStep2, function (ctx) { return Make.drawText(ctx, "   phases.2"); }]);
+        settings.push([moveStep3, function (ctx) { return Make.drawText(ctx, "   phases.1 phases.2"); }]);
+        settings.push([moveStep1, function (ctx) { return Make.drawText(ctx, "   phases.immediate: 3"); }]);
+        settings.push([moveStep1, function (ctx) { return Make.drawText(ctx, "   phases.immediate2: 1"); }]);
+        settings.push([moveStep1, function (ctx) { return Make.drawText(ctx, "   phases.deferred: 3"); }]);
+        stepper.settings = settings;
+    };
+    Make.calLineHeight = function (graphic) {
+        var lineCount = graphic.text.split("\n").length;
+        var totalLineHeight = graphic.geometry.height - graphic.textVerticalPadding * 2;
+        return totalLineHeight / lineCount;
+    };
+    Make.newLinePointer = function (ctx) {
+        console.info("static Make.newLinePointer");
+        var line = Common.canvas().newLine();
+        var start = ctx.origin.add(new Point(-100, ctx.refer.textVerticalPadding + ctx.lineHeight / 2 + ctx.lineHeight * 2));
+        line.points = [start, start.subtract(new Point(Make.linePointerWidth, 0))];
+        line.headType = "FilledArrow";
+        ctx.addGraphic(line, Make.linePointer);
+    };
+    Make.moveLinePointer = function (ctx, stepCount) {
+        if (stepCount === void 0) { stepCount = 1; }
+        Common.moveLine(ctx.getGraphic(Make.linePointer), new Point(0, ctx.lineHeight * stepCount));
+    };
+    Make.buildMoveLinePointer = function (stepCount) {
+        if (stepCount === void 0) { stepCount = 1; }
+        return function (ctx) { return Make.moveLinePointer(ctx, stepCount); };
+    };
+    Make.currentContentPoint = function (ctx) {
+        var linePointer = ctx.getGraphic(Make.linePointer);
+        return new Point(ctx.origin.x + Make.contentOffset, linePointer.points[0].y);
+    };
+    Make.drawText = function (ctx, text, key, offset) {
+        var point = Make.currentContentPoint(ctx);
+        if (offset)
+            point = point.add(offset);
+        var solid = Common.canvas().addText(text, point);
+        solid.textSize = 12;
+        ctx.addGraphic(solid, key);
+        return solid;
+    };
+    Make.connect = function (ctx, head, tail, key) {
+        var line = Common.canvas().connect(head, tail);
+        line.headType = "FilledArrow";
+        ctx.addGraphic(line, key);
+        return line;
+    };
+    Make.newImmediate = function (ctx) {
+        console.info("static Make.newImmediate");
+        var immediate = Make.drawText(ctx, "phases.immediate", Make.immediate);
+        var value1 = Make.drawText(ctx, "1", Make.value1, new Point(150, 0));
+        Make.connect(ctx, immediate, value1, Make.immediateLine);
+    };
+    Make.newDeferred = function (ctx) {
+        var deferred = Make.drawText(ctx, "phases.deferred", Make.deferred, new Point(-50, 0));
+        Make.connect(ctx, deferred, ctx.getGraphic(Make.immediate), Make.deferredLine);
+    };
+    Make.newImmediate2 = function (ctx) {
+        var immediate2 = Make.drawText(ctx, "phases.immediate2", Make.immediate2);
+        Make.connect(ctx, immediate2, ctx.getGraphic(Make.value1), Make.immediate2Line);
+    };
+    Make.immediateAssign2 = function (ctx) {
+        var value2 = Make.drawText(ctx, "2", Make.value2, new Point(150, 0));
+        Make.connect(ctx, ctx.getGraphic(Make.immediate), value2, Make.immediateLine);
+    };
+    Make.immediateAssign3 = function (ctx) {
+        var value3 = Make.drawText(ctx, "3", Make.value3, new Point(150, 0));
+        Make.connect(ctx, ctx.getGraphic(Make.immediate), value3, Make.immediateLine);
+    };
+    Make.linePointerWidth = 100;
+    Make.contentOffset = 100;
+    Make.referName = "case";
+    Make.linePointer = "linePointer";
+    Make.immediate = "immediate";
+    Make.value1 = "value1";
+    Make.immediateLine = "immediateLine";
+    Make.deferred = "deferred";
+    Make.deferredLine = "deferredLine";
+    Make.immediate2 = "immediate2";
+    Make.immediate2Line = "immediate2Line";
+    Make.value2 = "value2";
+    Make.value3 = "value3";
+    return Make;
 }());
 /** 图层切换模式 */
 var LayerSwitchMode;
@@ -513,7 +789,7 @@ var LayerSwitcher = /** @class */ (function () {
     }
     /**
      * 切换图层。
-     * @param  [graphic] 图形，该图形上记录着图层切换参数
+     * @param [graphic] 图形，该图形上记录着图层切换参数
      */
     LayerSwitcher.switch = function (graphic) {
         console.info("static LayerSwitcher.switch");
@@ -528,6 +804,7 @@ var LayerSwitcher = /** @class */ (function () {
         var _this = this;
         console.info("static LayerSwitcher.switchByForm");
         var canvasName = Common.canvas().name;
+        console.debug("canvasName: ".concat(canvasName));
         var layerSwitcher = LayerSwitcher.layerSwitchers[canvasName];
         console.debug("layerSwitcher: ".concat(layerSwitcher));
         // shift 强制重新配置
@@ -539,24 +816,25 @@ var LayerSwitcher = /** @class */ (function () {
             return form.show("配置图层切换参数", "确定")
                 .then(function (response) {
                 var values = response.values;
-                LayerSwitcher.layerSwitchers[canvasName] = LayerSwitcher.init(values[_this.layerNamePrefixKey], values[_this.layerSwitchModeKey], values[_this.layerCustomSettingsKey]);
-            });
+                LayerSwitcher.layerSwitchers[canvasName] = LayerSwitcher.init(values[_this.layerNamePrefixKey], values[_this.layerSwitchModeKey], JSON.parse(values[_this.layerCustomSettingsKey]));
+            })
+                .catch(function (response) { return console.error("error:", response); });
         }
         layerSwitcher.switch();
     };
     /**
      * 切换图层通过图形参数。
      *
-     * @param  graphic 图形，该图形上记录着图层切换参数
+     * @param graphic 图形，该图形上记录着图层切换参数
      */
     LayerSwitcher.switchByGraphic = function (graphic) {
         console.info("static LayerSwitcher.switchByGraphic");
         var layerSwitcher = LayerSwitcher.layerSwitchers[graphic.name];
         console.debug("layerSwitcher: ".concat(layerSwitcher));
         if (app.shiftKeyDown || !layerSwitcher) {
-            var layerNamePrefix = graphic.userData[this.layerNamePrefixKey] || this.layerNamePrefix;
-            var layerSwitchMode = LayerSwitchMode[graphic.userData[this.layerSwitchModeKey]] || this.layerSwitchMode;
-            var layerCustomSettings = graphic.userData[this.layerCustomSettingsKey] || this.layerCustomSettings;
+            var layerNamePrefix = graphic.userData[this.layerNamePrefixKey];
+            var layerSwitchMode = LayerSwitchMode[graphic.userData[this.layerSwitchModeKey]];
+            var layerCustomSettings = graphic.userData[this.layerCustomSettingsKey];
             return this.layerSwitchers[graphic.name] = LayerSwitcher.init(layerNamePrefix, layerSwitchMode, layerCustomSettings);
         }
         layerSwitcher.switch();
@@ -578,27 +856,30 @@ var LayerSwitcher = /** @class */ (function () {
         else {
             layerSwitcher.settings = layerCustomSettings;
         }
-        layerSwitcher.settings.unshift([]);
-        console.debug("layerSwitcher.settings: ".concat(JSON.stringify(layerSwitcher.settings)));
+        layerSwitcher.settings.unshift([]); //最初不显示任何图层
+        console.debug("settings: ".concat(JSON.stringify(layerSwitcher.settings)));
         layerSwitcher.indexSwitcher = new IndexSwitcher(0, layerSwitcher.layers.length);
         layerSwitcher.show();
         return layerSwitcher;
+    };
+    LayerSwitcher.prototype.switch = function () {
+        console.info("LayerSwitcher.switch");
+        this.show(app.optionKeyDown ? this.indexSwitcher.prev() : this.indexSwitcher.next());
     };
     LayerSwitcher.prototype.show = function (index) {
         var _this = this;
         if (index === void 0) { index = this.indexSwitcher.current; }
         this.hiddenAll();
-        index in this.settings && this.settings[index].forEach(function (item) { return _this.layers[item].visible = true; });
+        index in this.settings
+            && this.settings[index]
+                .filter(function (item) { return item in _this.layers; })
+                .forEach(function (item) { return _this.layers[item].visible = true; });
     };
     LayerSwitcher.prototype.hiddenAll = function () {
         for (var _i = 0, _a = this.layers; _i < _a.length; _i++) {
             var layer = _a[_i];
             layer.visible = false;
         }
-    };
-    LayerSwitcher.prototype.switch = function () {
-        console.info("LayerSwitcher.switch");
-        this.show(app.optionKeyDown ? this.indexSwitcher.prev() : this.indexSwitcher.next());
     };
     /**图形名称前缀键*/
     LayerSwitcher.layerNamePrefixKey = "layer-name-prefix";
@@ -607,8 +888,8 @@ var LayerSwitcher = /** @class */ (function () {
     /**图形自定义设置键*/
     LayerSwitcher.layerCustomSettingsKey = "layer-custom-settings";
     LayerSwitcher.layerNamePrefix = "layer";
-    LayerSwitcher.layerSwitchMode = LayerSwitchMode.rotate;
-    LayerSwitcher.layerCustomSettings = [[]];
+    LayerSwitcher.layerSwitchMode = LayerSwitchMode.increase;
+    LayerSwitcher.layerCustomSettings = [[0]];
     LayerSwitcher.layerArguments = (_a = {},
         _a[LayerSwitcher.layerNamePrefixKey] = LayerSwitcher.layerNamePrefix,
         _a[LayerSwitcher.layerSwitchModeKey] = LayerSwitcher.layerSwitchMode,
@@ -677,7 +958,7 @@ var PeaceTable = /** @class */ (function () {
      */
     PeaceTable.prototype.drawColumn = function (canvas, origin, texts) {
         var _this = this;
-        console.info("drawColumn: ", texts.length);
+        console.info("drawColumn: ".concat(texts.length));
         var increase = new Point(0, this.cellSize.height);
         return new Group(texts.map(function (text, index) {
             return _this.drawCell(canvas, index === 0 ? origin : origin = origin.add(increase), text);
@@ -746,7 +1027,7 @@ var PeaceTable = /** @class */ (function () {
         return texts;
     };
     PeaceTable.extractSolidText = function (solid) {
-        console.debug("extractSolidText: ", solid.text);
+        console.debug("extractSolidText: ".concat(solid.text));
         return solid.text;
     };
     PeaceTable.defaults = new PeaceTable(new Size(200, 70), 12, Color.RGB(1.0, 1.0, 0.75, null));
@@ -760,8 +1041,9 @@ var PeaceTable = /** @class */ (function () {
 }());
 (function () {
     var library = new PlugIn.Library(new Version("0.1"));
-    library.Common = Common;
-    library.LayerSwitcher = LayerSwitcher;
+    library["Common"] = Common;
+    library["Stepper"] = Stepper;
+    library["LayerSwitcher"] = LayerSwitcher;
     //因为不能直接在 library 上添加属性，所以将属性都定义在 dynamic 中
     library.dynamic = {
         direction: "up",
@@ -790,7 +1072,7 @@ var PeaceTable = /** @class */ (function () {
     /**
      * 设置绘图样式。
      *
-     * @param  style 绘图样式：large、small
+     * @param style 绘图样式：large、small
      * @return {void}
      */
     library.setStyle = function (style) {
@@ -817,7 +1099,7 @@ var PeaceTable = /** @class */ (function () {
     /**
      * 绘制抽象的虚拟内存。
      *
-     * @param  [canvas] 画布
+     * @param [canvas] 画布
      * @param {Point} [origin] 起点
      * @return  虚拟内存图
      */
@@ -837,7 +1119,7 @@ var PeaceTable = /** @class */ (function () {
     library.drawTableColumn = function (canvas, origin) {
         console.info("drawTableColumn");
         var locationKey = "drawTableColumn.location";
-        Common.readFileContentForGraphic(canvas, locationKey)
+        Common.readFileContentAssociatively(canvas, locationKey)
             .then(function (response) { return JSON.parse(response.data); })
             .then(function (response) { return PeaceTable.small.drawColumn(canvas, origin, response); })
             .catch(function (response) { return console.error("drawMemoryAbstractly error: ", response); });
@@ -845,7 +1127,7 @@ var PeaceTable = /** @class */ (function () {
     /**
      * 绘制抽象的虚拟内存。
      *
-     * @param  [canvas] 画布
+     * @param [canvas] 画布
      * @param {Point} [origin] 起点
      * @return  虚拟内存图
      */
@@ -886,7 +1168,7 @@ var PeaceTable = /** @class */ (function () {
     /**
      * 绘制虚拟内存单元，抽象地。
      *
-     * @param  canvas 画布
+     * @param canvas 画布
      * @param {Point} origin 起点，矩形左下角处位置
      * @param {String[]} descriptions 内存块描述集合
      * @return  虚拟内存单元图
@@ -905,7 +1187,7 @@ var PeaceTable = /** @class */ (function () {
     /**
      * 绘制栈区抽象虚拟内存。案例参考：variable.stack.json。
      *
-     * @param  [canvas] 画布
+     * @param [canvas] 画布
      * @param {Point} [origin] 起点
      */
     library.drawStackMemoryAbstractly = function (canvas, origin) {
@@ -984,10 +1266,10 @@ var PeaceTable = /** @class */ (function () {
     /**
      * 基于内存映射，绘制虚拟内存。
      *
-     * @param  [canvas] 画布
+     * @param [canvas] 画布
      * @param {Point} [origin] 起点
-     * @param  [content] 内容
-     * @param  [location] 内容
+     * @param [content] 内容
+     * @param [location] 内容
      * @return  虚拟内存图
      */
     library.drawMemoryForMaps = function (canvas, origin, content, location) {
@@ -1022,7 +1304,7 @@ var PeaceTable = /** @class */ (function () {
     /**
      * 解析内存映射。
      *
-     * @param  content 内存映射内容
+     * @param content 内存映射内容
      * @return {MemoryBlock[]} 内存块
      */
     library.resolveMaps = function (content) {
@@ -1090,7 +1372,7 @@ var PeaceTable = /** @class */ (function () {
     /**
      * 绘制虚拟内存单元，从下往上绘制。
      *
-     * @param  canvas 画布
+     * @param canvas 画布
      * @param {Point} origin 起点，矩形的左下点
      * @param {MemoryBlock[]} blocks 内存块集合
      * @return  绘制的图形
@@ -1117,7 +1399,7 @@ var PeaceTable = /** @class */ (function () {
     /**
      * 绘制虚拟内存单元，从下往上绘制。
      *
-     * @param  canvas 画布
+     * @param canvas 画布
      * @param {Point} startPoint 起点，矩形左下角处位置
      * @param {MemoryBlock} block 内存块
      * @return  绘制的图形
@@ -1143,9 +1425,9 @@ var PeaceTable = /** @class */ (function () {
     /**
      * 绘制内存矩形。
      *
-     * @param  canvas 画布
+     * @param canvas 画布
      * @param {Point} location 位置
-     * @param  [description] 描述
+     * @param [description] 描述
      * @return {Shape} 绘制的图形
      */
     library.drawMemoryRect = function (canvas, location, description) {
@@ -1164,7 +1446,7 @@ var PeaceTable = /** @class */ (function () {
     /**
      * 绘制虚拟内存单元地址。
      *
-     * @param  canvas 画布
+     * @param canvas 画布
      * @param {Point} origin 起点
      * @param {Number|BigInt} address 地址
      * @return {Group} 绘制的图形
@@ -1205,7 +1487,7 @@ var PeaceTable = /** @class */ (function () {
     /**
      * 绘制内存空间尺寸。
      *
-     * @param  canvas 画布
+     * @param canvas 画布
      * @param {Point} location 位置
      * @param {Number} size 空间尺寸
      * @return {Group} 绘制的图形

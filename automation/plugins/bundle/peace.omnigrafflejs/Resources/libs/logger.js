@@ -1,18 +1,17 @@
 /** 日志类库。仅封装日志级别。 */
 Console.LEVELS = ["OFF", "ERROR", "WARN", "INFO", "DEBUG"];
-// Console.prototype.level = "DEBUG";
-console.level = "DEBUG";
+Console.prototype.level = "INFO";
+console.level = Console.prototype.level;
 
-console.setLevel = function (level) {
+Console.prototype.setLevel = function (level) {
     this.level = level;
 }
 
-
-console.isLevelEnabled = function (level) {
+Console.prototype.isLevelEnabled = function (level) {
     return Console.LEVELS.indexOf(this.level) >= Console.LEVELS.indexOf(level);
 }
 
-console.debug = function (...args) {
+Console.prototype.debug = function (...args) {
     // console.debug 未定义
-    if (this.isLevelEnabled("DEBUG")) this.info(...args);
+    if (this.isLevelEnabled("DEBUG")) this.info("DEBUG - ", ...args);
 }
