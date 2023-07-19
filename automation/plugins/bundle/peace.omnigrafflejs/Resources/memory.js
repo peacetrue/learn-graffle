@@ -858,7 +858,7 @@ var LayerSwitcher = /** @class */ (function () {
         }
         layerSwitcher.settings.unshift([]); //最初不显示任何图层
         console.debug("settings: ".concat(JSON.stringify(layerSwitcher.settings)));
-        layerSwitcher.indexSwitcher = new IndexSwitcher(0, layerSwitcher.layers.length);
+        layerSwitcher.indexSwitcher = new IndexSwitcher(0, layerSwitcher.settings.length);
         layerSwitcher.show();
         return layerSwitcher;
     };
@@ -869,6 +869,7 @@ var LayerSwitcher = /** @class */ (function () {
     LayerSwitcher.prototype.show = function (index) {
         var _this = this;
         if (index === void 0) { index = this.indexSwitcher.current; }
+        console.info("LayerSwitcher.show: ".concat(index));
         this.hiddenAll();
         index in this.settings
             && this.settings[index]

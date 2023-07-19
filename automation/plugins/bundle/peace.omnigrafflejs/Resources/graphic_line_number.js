@@ -1,8 +1,8 @@
 (function () {
     var action = new PlugIn.Action(function (selection) {
         var that = this;
-        var stepper = that.plugIn.library("memory")["Common"];
-        stepper.setGraphicLineNumber(selection.solids[0]);
+        var common = that.plugIn.library("memory")["Common"];
+        common.setGraphicLineNumber(selection.solids[0]);
     });
     action.validate = function (selection) {
         return selection && selection.solids.length > 0;

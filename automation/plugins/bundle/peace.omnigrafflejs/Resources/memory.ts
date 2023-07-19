@@ -718,8 +718,8 @@ class Make {
     let moveStep1: StepperHandler = Make.moveLinePointer;
     let moveStep2: StepperHandler = Make.buildMoveLinePointer(2);
     let moveStep3: StepperHandler = Make.buildMoveLinePointer(3.5);
-    let moveStep5: StepperHandler = Make.buildMoveLinePointer(7);
-    let moveStep_10: StepperHandler = Make.buildMoveLinePointer(-10);
+    let moveStep7: StepperHandler = Make.buildMoveLinePointer(7);
+    let backStep10: StepperHandler = Make.buildMoveLinePointer(-10);
 
     let settings: StepperHandler[][] = [];
     settings.push([Stepper.clear, Stepper.next]);
@@ -731,8 +731,8 @@ class Make {
     settings.push([moveStep1, ctx => Make.drawText(ctx, "phases.1:")]);
     settings.push([moveStep2, ctx => Make.drawText(ctx, "phases.2:")]);
     settings.push([moveStep2, ctx => Make.drawText(ctx, "phases.case: phases.1 phases.2")]);
-    settings.push([moveStep5, Make.immediateAssign3]);
-    settings.push([moveStep_10, ctx => Make.drawText(ctx, "  phases.1")]);
+    settings.push([moveStep7, Make.immediateAssign3]);
+    settings.push([backStep10, ctx => Make.drawText(ctx, "  phases.1")]);
     settings.push([moveStep2, ctx => Make.drawText(ctx, "   phases.2")]);
     settings.push([moveStep3, ctx => Make.drawText(ctx, "   phases.1 phases.2")]);
     settings.push([moveStep1, ctx => Make.drawText(ctx, "   phases.immediate: 3")]);
@@ -928,7 +928,7 @@ class LayerSwitcher {
     }
     layerSwitcher.settings.unshift([]);//最初不显示任何图层
     console.debug(`settings: ${JSON.stringify(layerSwitcher.settings)}`);
-    layerSwitcher.indexSwitcher = new IndexSwitcher(0, layerSwitcher.layers.length);
+    layerSwitcher.indexSwitcher = new IndexSwitcher(0, layerSwitcher.settings.length);
     layerSwitcher.show();
     return layerSwitcher;
   }
@@ -939,6 +939,7 @@ class LayerSwitcher {
   }
 
   public show(index: number = this.indexSwitcher.current) {
+    console.info(`LayerSwitcher.show: ${index}`);
     this.hiddenAll();
     index in this.settings
     && this.settings[index]
