@@ -4,7 +4,7 @@
     let library = that.plugIn.library("memory");
     // let common: typeof Common = library["Common"];
     let memory: typeof Memory = library["Memory"];
-    memory.horizontal.drawMemory();
+    memory.drawMemory();
   });
   action.validate = function (selection: Selection) {
     return true;

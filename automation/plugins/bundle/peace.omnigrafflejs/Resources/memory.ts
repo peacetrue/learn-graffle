@@ -18,7 +18,7 @@ class Logger {
   public static config: Record<string, LoggerLevel> = {
     [Logger.CATEGORY_ROOT]: LoggerLevel.DEBUG,
     "Common": LoggerLevel.DEBUG,
-    "Memory.incrementOrigin": LoggerLevel.INFO,
+    "MemoryPainter.incrementOrigin": LoggerLevel.WARN,
   };
   /** 日志缓存，category 为 key */
   public static loggers: Record<string, Logger> = {};
@@ -170,6 +170,11 @@ class Logger {
 
 class Common {
 
+  /** 上下左右中 5 个磁极 */
+  public static magnets_5 = [new Point(0, 0),
+    new Point(1.00, 1.00), new Point(1.00, -1.00),
+    new Point(-1.00, -1.00), new Point(-1.00, 1.00),
+  ];
   /** 保存各 canvas 的配置，以 canvas.name 为 key */
   public static canvasOptions = {};
 
@@ -182,7 +187,6 @@ class Common {
    * @return
    */
   public static option(object: Solid | Canvas, key: string, value?: string) {
-
     let actions = {
       "Canvas": (object: Canvas, key, value) => this.canvasOption(object, key, value),
       "*": (object: Graphic, key, value) => value === undefined ? object.userData[key] : object.setUserData(key, value),
@@ -297,13 +301,11 @@ class Common {
    * @param locationKey 文件位置键
    */
   public static readFileContentAssociatively(object: Solid | Canvas, locationKey: string) {
-
-    if (app.optionKeyDown) {
+    if (app.shiftKeyDown) {
       this.option(object, locationKey, null);
       return Promise.reject("clear cache!");
     }
     let location = this.option(object, locationKey);
-
     if (!location) return this.selectFileAssociatively(object, locationKey);
     return this.readFileContent(location).catch(response => {
       // response:  Error: 未能完成操作。（kCFErrorDomainCFNetwork错误1。）
@@ -326,6 +328,7 @@ class Common {
         : Common.readFileContentAssociatively(object, locationKey)
     )
       .then(response => {
+        Logger.getLogger().debug("response.data: \n", response.data);
         return {...response, data: JSON.parse(response.data)};
       });
   }
@@ -673,15 +676,17 @@ class Common {
   }
 
   public static moveLine(line: Line, distance: Point) {
-
     line.points = line.points.map(item => item.add(distance));
     line.head = null;
     line.tail = null;
   }
 
   public static moveSolid(solid: Solid, distance: Point) {
-
     solid.geometry = solid.geometry.offsetBy(distance.x, distance.y);
+  }
+
+  public static moveToSolid(solid: Solid, origin: Point) {
+    solid.geometry = new Rect(origin.x, origin.y, solid.geometry.width, solid.geometry.height);
   }
 
   /** TODO 删除元素很慢 */
@@ -726,6 +731,18 @@ class Common {
     return paddingChar.repeat(length - src.length) + src;
   }
 
+  public static bolder(graphic: Graphic) {
+    if (graphic instanceof Solid) graphic.fontName = "PingFangSC-Semibold";
+    else if (graphic instanceof Group) {
+      graphic.graphics
+        .filter(item => item instanceof Solid)
+        .forEach(item => this.bolder(item));
+    }
+  }
+
+  public static size2point(size: Size): Point {
+    return new Point(size.width, size.height);
+  }
 
   public static test() {
 
@@ -1072,7 +1089,7 @@ class LayerSwitcher {
 
     // shift 强制重新配置
     if (app.shiftKeyDown || !layerSwitcher) {
-      let form = new Form()
+      let form = new Form();
       form.addField(new Form.Field.String(this.layerNamePrefixKey, "图层名称前缀", this.layerNamePrefix, null), 0);
       form.addField(new Form.Field.Option(this.layerSwitchModeKey, "图层切换模式", Object.values(LayerSwitchMode).slice(3), ["轮换", "渐显", "自定义"], this.layerSwitchMode, null), 1);
       form.addField(new Form.Field.String(this.layerCustomSettingsKey, "图层自定义配置", JSON.stringify(this.layerCustomSettings), null), 2);
@@ -1153,12 +1170,12 @@ class LayerSwitcher {
 
 class PeaceTable {
 
-  public static defaults: PeaceTable = PeaceTable.instance(
+  public static defaults: PeaceTable = Logger.proxyInstance(PeaceTable.instance(
     new Size(200, 70), 12, Color.RGB(1.0, 1.0, 0.75, null)
-  );
-  public static small: PeaceTable = PeaceTable.instance(
+  ));
+  public static small: PeaceTable = Logger.proxyInstance(PeaceTable.instance(
     new Size(200, 20), 12, Color.RGB(1.0, 1.0, 0.75, null)
-  );
+  ));
 
   public static cellFillColors: Record<string, Color> = {
     "[anon]": Color.RGB(0.75, 1.0, 0.75, null),// 浅绿，已占用但不知道具体用途
@@ -1186,7 +1203,6 @@ class PeaceTable {
    * @return 形状
    */
   public drawTable(canvas: Canvas, origin: Point, texts: string[][]): Group {
-
     let increase = new Point(0, this.cellSize.height);
     return new Group(
       texts.map((item, index) => {
@@ -1205,19 +1221,12 @@ class PeaceTable {
    * @return 形状
    */
   public drawRow(canvas: Canvas, origin: Point, texts: string[]): Group {
-
     let increase = new Point(this.cellSize.width, 0);
     return new Group(texts.map((text, index) => {
       return this.drawCell(canvas, index === 0 ? origin : origin = origin.add(increase), text);
     }));
   }
 
-  public static bolder(group: Group): Group {
-    for (let graphic of group.graphics) {
-      if (graphic instanceof Solid) graphic.fontName = "PingFangSC-Semibold";
-    }
-    return group;
-  }
 
   /**
    * 绘制列。
@@ -1228,7 +1237,6 @@ class PeaceTable {
    * @return 形状
    */
   public drawColumn(canvas: Canvas, origin: Point, texts: string[]): Group {
-
     let increase = new Point(0, this.cellSize.height);
     return new Group(texts.map((text, index) => {
       return this.drawCell(canvas, index === 0 ? origin : origin = origin.add(increase), text);
@@ -1283,7 +1291,6 @@ class PeaceTable {
   }
 
   public static extractTableTexts(table: Table): string[][] {
-
     let texts: string[][] = [];
     for (let i = 0; i < table.rows; i++) {
       texts.push([]);
@@ -1296,14 +1303,33 @@ class PeaceTable {
   }
 
   public static extractSolidText(solid: Solid): string {
-
     return solid.text;
   }
 }
 
-/**
- * 内存块。
- */
+/** 内存 */
+class Memory {
+
+  public title: string;//标题
+  public blocks: MemoryBlock[] = [];//内存块集合
+
+  public static instance(title: string, blocks: MemoryBlock[]) {
+    let memory = new Memory();
+    memory.title = title;
+    memory.blocks = blocks;
+    return memory;
+  }
+
+  /** 解析内存数据 */
+  public static parse(data: Record<string, any> | Record<string, any>[]) {
+    if (data instanceof Array) {
+      return this.instance(null, MemoryBlock.parse(data));
+    }
+    return this.instance(data["title"], MemoryBlock.parse(data["blocks"]))
+  }
+}
+
+/** 内存块 */
 class MemoryBlock {
 
   public startAddress: number | bigint;//起始地址
@@ -1324,12 +1350,16 @@ class MemoryBlock {
     return `'${this.description}':${this.startAddress}~${this.endAddress}`;
   }
 
+  public static getMaxAddressLength(blocks: MemoryBlock[], base: number = 10) {
+    return Math.max(...blocks.map(block => block.endAddress == null ? 0 : block.endAddress.toString(base).length));
+  }
+
   public static subtract(left: number | bigint, right: number | bigint) {
     return Number(BigInt(left) - BigInt(right));
   }
 
   /** 将记录转换为内存块对象 */
-  public static wraps(object: Record<string, any>[]): MemoryBlock[] {
+  public static parse(object: Record<string, any>[]): MemoryBlock[] {
     return object.map(item => this.wrap(item));
   }
 
@@ -1403,22 +1433,68 @@ enum MemoryDirection {
 }
 
 /** 内存绘制方向影响相关图形起点的递增方式 */
-type MemoryOriginIncrementer = (origin: Point, memory: Memory) => Point;
+type MemoryOriginIncrementer = (origin: Point, memory: MemoryPainter) => Point;
+
+abstract class MemoryOriginHandler {
+  protected memoryPainter: MemoryPainter;
+
+  constructor(memoryPainter: MemoryPainter) {
+    this.memoryPainter = memoryPainter;
+  }
+
+  abstract getNextBlockOrigin(origin: Point): Point;
+
+  getAddressLineOrigin(origin: Point): Point {
+    return origin;
+  }
+
+  abstract getAddressLineEndpoint(origin: Point): Point;
+
+  abstract getAddressLabelOrigin(origin: Point): Point;
+}
+
+class BottomUpHandler extends MemoryOriginHandler {
+  getNextBlockOrigin(origin: Point): Point {
+    return origin.add(new Point(0, this.memoryPainter.table.cellSize.height));
+  }
 
 
-class Memory {
+  getAddressLineEndpoint(origin: Point): Point {
+    return origin.subtract(new Point(this.memoryPainter.addressLineLength, 0));
+  }
 
-  public static defaults: Memory = Logger.proxyInstance(Memory.instance());
-  public static small: Memory = Logger.proxyInstance(Memory.instance());
-  public static abstract: Memory = Logger.proxyInstance(Memory.instanceAbstractly());
-  public static horizontal: Memory = Logger.proxyInstance(Memory.instanceHorizontal());
+  getAddressLabelOrigin(origin: Point): Point {
+    return origin.subtract(new Point(this.memoryPainter.addressLabelTextLength / 2 * 8, 0));
+  }
+}
 
-  public static blockIncrementers: MemoryOriginIncrementer[] = Memory.buildBlockIncrementers();
-  public static addressLineIncrementers: MemoryOriginIncrementer[] = Memory.buildAddressLineIncrementers();
-  public static addressLabelIncrementers: MemoryOriginIncrementer[] = Memory.buildAddressLabelIncrementers();
+class LeftRightHandler extends MemoryOriginHandler {
+  getNextBlockOrigin(origin: Point): Point {
+    return origin.add(new Point(this.memoryPainter.table.cellSize.width, 0));
+  }
+
+  getAddressLineOrigin(origin: Point): Point {
+    return origin.add(new Point(0, this.memoryPainter.table.cellSize.height));
+  }
+
+  getAddressLineEndpoint(origin: Point): Point {
+    return origin.add(new Point(0, this.memoryPainter.addressLineLength));
+  }
+
+  getAddressLabelOrigin(origin: Point): Point {
+    return origin.add(new Point(0, 12 / 2));
+  }
+}
+
+/** 内存画师 */
+class MemoryPainter {
+
+  public static vertical: MemoryPainter = Logger.proxyInstance(MemoryPainter.instanceVertical());
+  public static horizontal: MemoryPainter = Logger.proxyInstance(MemoryPainter.instanceHorizontal());
 
   public table: PeaceTable = PeaceTable.small;
   public direction: MemoryDirection = MemoryDirection.BOTTOM_UP; //绘制方向
+  public originHandler: MemoryOriginHandler; //绘制方向
   public showAddress: boolean = true;   // 是否显示地址
   public addressLineLength: number = 50;
   public addressLabelSize: Size = new Size(150, 20);
@@ -1427,73 +1503,49 @@ class Memory {
   public showSize: boolean = true;      // 是否显示占用空间
   public sizeStyle: string = "inner";   // 占用空间显示样式：outer、inner
 
-  public static instance() {
-    return new Memory();
-  }
-
-  public static instanceAbstractly() {
-    let memory = new Memory();
-    memory.showAddress = false;
-    memory.showSize = false;
-    return memory;
+  public static instanceVertical() {
+    let painter = new MemoryPainter();
+    painter.direction = MemoryDirection.BOTTOM_UP;
+    painter.originHandler = Logger.proxyInstance(new BottomUpHandler(painter));
+    return painter;
   }
 
   public static instanceHorizontal() {
-    let memory = new Memory();
-    memory.direction = MemoryDirection.LEFT_RIGHT;
-    memory.addressLineLength = 25;
-    memory.addressLabelTextBase = 10;
-    memory.showSize = false;
-    return memory;
+    let painter = new MemoryPainter();
+    painter.direction = MemoryDirection.LEFT_RIGHT;
+    painter.originHandler = Logger.proxyInstance(new LeftRightHandler(painter));
+    painter.addressLineLength = 25;
+    painter.addressLabelTextBase = 10;
+    painter.showSize = false;
+    return painter;
   }
 
-  public static buildBlockIncrementers(): MemoryOriginIncrementer[] {
-    let incrementers: MemoryOriginIncrementer[] = [];
-    incrementers[MemoryDirection.BOTTOM_UP] = function (origin: Point, memory: Memory) {
-      return origin.add(new Point(0, memory.table.cellSize.height))
+  public static canvasCache: Record<string, MemoryPainter> = {};
+  public static modeKey: string = "mode";
+  public static modeValue: string = "vertical";
+
+  /**
+   * 绘制地址空间布局。
+   *
+   * @param canvas 画布
+   * @param origin 起点
+   * @param [content] 内容
+   * @return 虚拟内存图
+   */
+  public static drawMemory(canvas: Canvas = Common.canvas(), origin: Point = Common.windowCenterPoint()) {
+    let canvasName = canvas.name;
+    let memory: MemoryPainter = MemoryPainter.canvasCache[canvasName];
+    // shift 强制重新配置
+    if (app.shiftKeyDown || !memory) {
+      let form = new Form();
+      form.addField(new Form.Field.Option(this.modeKey, "绘制模式", ["vertical", "horizontal"], ["垂直", "水平"], this.modeValue, null), 0);
+      return form.show("配置地址空间绘制参数", "确定")
+        .then(response => MemoryPainter.canvasCache[canvasName] = MemoryPainter[response.values[this.modeKey]])
+        .then(response => MemoryPainter.canvasCache[canvasName].drawMemorySelectively(canvas, origin))
+        .catch(response => Logger.getLogger().error("error:", response));
     }
-    incrementers[MemoryDirection.LEFT_RIGHT] = function (origin: Point, memory: Memory) {
-      return origin.add(new Point(memory.table.cellSize.width, 0))
-    }
-    return incrementers;
-  }
-
-  public static buildAddressLineIncrementers(): MemoryOriginIncrementer[] {
-    let incrementers: MemoryOriginIncrementer[] = [];
-    incrementers[MemoryDirection.BOTTOM_UP] = function (origin: Point, memory: Memory) {
-      return origin.subtract(new Point(memory.addressLineLength, 0));
-    }
-    incrementers[MemoryDirection.LEFT_RIGHT] = function (origin: Point, memory: Memory) {
-      return origin.subtract(new Point(0, memory.addressLineLength));
-    }
-    return incrementers;
-  }
-
-  public static buildAddressLabelIncrementers(): MemoryOriginIncrementer[] {
-    let incrementers: MemoryOriginIncrementer[] = [];
-    incrementers[MemoryDirection.BOTTOM_UP] = function (origin: Point, memory: Memory) {
-      return origin.subtract(new Point(memory.addressLabelTextLength / 2 * 8, 0));
-    }
-    incrementers[MemoryDirection.LEFT_RIGHT] = function (origin: Point, memory: Memory) {
-      return origin.subtract(new Point(0, 12 / 2));
-    }
-    return incrementers;
-  }
-
-  public incrementOrigin(increments: MemoryOriginIncrementer[], origin: Point) {
-    return increments[this.direction](origin, this);
-  }
-
-  public getNextBlockOrigin(origin: Point) {
-    return this.incrementOrigin(Memory.blockIncrementers, origin);
-  }
-
-  public getLineEndpoint(origin: Point) {
-    return this.incrementOrigin(Memory.addressLineIncrementers, origin);
-  }
-
-  public getAddressLabelOrigin(origin: Point) {
-    return this.incrementOrigin(Memory.addressLabelIncrementers, origin);
+    if (app.optionKeyDown) Common.option(canvas, MemoryPainter.drawMemoryLocationKey, null);
+    memory.drawMemorySelectively(canvas, origin);
   }
 
   /**
@@ -1510,7 +1562,7 @@ class Memory {
       // return (location ? common.readFileContent(location) : common.selectFile())
       .then(response => {
 
-        let blocks = Memory.resolveMaps(response.data);
+        let blocks = MemoryPainter.resolveMaps(response.data);
         blocks.unshift(new MemoryBlock(BigInt(0), blocks[0].startAddress));// 从 0 开始显示
         blocks.push(new MemoryBlock(
           blocks[blocks.length - 1].endAddress,// bigint 和 bigint 才能相减求 size
@@ -1557,6 +1609,8 @@ class Memory {
       });
   }
 
+  public static drawMemoryLocationKey = "drawMemoryLocation";
+
   /**
    * 基于内存映射，绘制虚拟内存。
    *
@@ -1565,10 +1619,27 @@ class Memory {
    * @param [content] 内容
    * @return 虚拟内存图
    */
-  public drawMemory(canvas: Canvas = Common.canvas(), origin: Point = Common.windowCenterPoint(), content?: string) {
-    return Common.readFileContentSelectively(canvas, "drawMemory", content)
-      .then(response => this.drawMemoryBlocks(canvas, origin, MemoryBlock.wraps(response.data)))
+  public drawMemorySelectively(canvas: Canvas = Common.canvas(), origin: Point = Common.windowCenterPoint(), content?: string) {
+    return Common.readFileContentSelectively(canvas, MemoryPainter.drawMemoryLocationKey, content)
+      .then(response => this.drawMemory(canvas, origin, response.data))
       .catch(response => Logger.getLogger().error(response));
+  }
+
+  public drawMemory(canvas: Canvas, origin: Point, data: any) {
+    let memory = Memory.parse(data);
+    let blocks = this.drawMemoryBlocks(canvas, origin, memory.blocks);
+    if (!memory.title) return blocks;
+    let title = this.drawTitle(canvas, origin, memory.title);
+    origin = Common.pointOfRect(blocks.geometry, "top-left");
+    Common.moveToSolid(title, origin.subtract(new Point(0, title.geometry.height)));
+    return new Group([title, blocks]);
+  }
+
+  public drawTitle(canvas: Canvas, origin: Point, title: string) {
+    let solid = canvas.addText(title, origin);
+    Common.bolder(solid);
+    solid.textSize = this.table.cellTextSize + 2;
+    return solid;
   }
 
   /**
@@ -1582,10 +1653,10 @@ class Memory {
   public drawMemoryBlocks(canvas: Canvas, origin: Point, blocks: MemoryBlock[]) {
     MemoryBlock.descend(blocks);
     MemoryBlock.padding(blocks, false);
-    this.addressLabelTextLength = String(blocks[0].endAddress).length;
+    this.addressLabelTextLength = MemoryBlock.getMaxAddressLength(blocks, this.addressLabelTextBase);
     // MemoryBlock.merge(blocks);
     let array = blocks.map((block, index) => {
-      if (index !== 0) origin = this.getNextBlockOrigin(origin);
+      if (index !== 0) origin = this.originHandler.getNextBlockOrigin(origin);
       // let prev = blocks[index - 1], curr = blocks[index];
       // if (prev.endAddress < curr.startAddress) {
       //   origin = origin.subtract(new Point(0, this.table.cellSize.height));
@@ -1608,15 +1679,15 @@ class Memory {
    */
   public drawMemoryBlock(canvas: Canvas, origin: Point, block: MemoryBlock) {
     let cell = this.table.drawCell(canvas, origin, block.description);
-    let endPoint = this.getNextBlockOrigin(origin);
+    let endpoint = this.originHandler.getNextBlockOrigin(origin);
     let graphics: Graphic[] = [cell];
     if (this.showAddress) {
-      graphics.push(this.drawMemoryAddress(canvas, origin, block.endAddress))
-      graphics.push(this.drawMemoryAddress(canvas, endPoint, block.startAddress))
+      block.endAddress != null && graphics.push(this.drawMemoryAddress(canvas, origin, block.endAddress))
+      block.startAddress != null && graphics.push(this.drawMemoryAddress(canvas, endpoint, block.startAddress))
     }
-    if (this.showSize) {
+    if (this.showSize && block.startAddress != null && block.endAddress != null) {
       let size = block.size();
-      if (this.sizeStyle === 'outer') graphics.push(this.drawMemorySize(canvas, endPoint, size));
+      if (this.sizeStyle === 'outer') graphics.push(this.drawMemorySize(canvas, endpoint, size));
       else cell.text += ` (${Common.formatMemorySize(size)})`;
     }
     return new Group(graphics);
@@ -1632,17 +1703,20 @@ class Memory {
    */
   public drawMemoryAddress(canvas: Canvas, origin: Point, address: number | bigint) {
     let line = canvas.newLine();
-    line.points = [origin, this.getLineEndpoint(origin)];
+    origin = this.originHandler.getAddressLineOrigin(origin);
+    line.points = [origin, this.originHandler.getAddressLineEndpoint(origin)];
     line.shadowColor = null;
+
     let formattedAddress = this.formatMemoryAddress(address);
-    let labelOrigin = this.getAddressLabelOrigin(line.points[1]);
-    return new Group([line, canvas.addText(formattedAddress, labelOrigin)]);
+    let labelOrigin = this.originHandler.getAddressLabelOrigin(line.points[1]);
+    let label = canvas.addText(formattedAddress, labelOrigin);
+    label.magnets = Common.magnets_5;
+    this.table.cellTextSize && (label.textSize = this.table.cellTextSize);
+    return new Group([line, label]);
   }
 
   /**
    * 格式化内存地址。
-   *
-   * PlugIn.find('com.github.peacetrue.learn.graffle').library('memory').formatMemoryAddress(bigint("0xffffffffffffffff"))
    *
    * @param address 内存地址
    * @return 内存地址描述
@@ -1701,8 +1775,8 @@ var _this = (function () {return this;})();
   library["Common"] = Common;
   library["Stepper"] = Stepper;
   library["LayerSwitcher"] = LayerSwitcher;
-  library["Memory"] = Memory;
-  Logger.proxyClassStaticFunction(Common);
+  library["Memory"] = MemoryPainter;
+  [Common, Memory, MemoryBlock].forEach(item => Logger.proxyClassStaticFunction(item));
   // Logger.proxy(Common.name, _this);
 
 
@@ -2082,16 +2156,16 @@ var _this = (function () {return this;})();
   library.drawMemoryBlock = function (canvas, startPoint, block) {
     // PeaceConsole.root.info(`drawMemoryBlock. startPoint=${startPoint}, block=${block}`);
     let dynamic = this.dynamic;
-    let endPoint = new Point(startPoint.x, startPoint.y - dynamic.rectSize.height);
+    let endpoint = new Point(startPoint.x, startPoint.y - dynamic.rectSize.height);
     let graphics = [
-      this.drawMemoryRect(canvas, endPoint, block.description),
+      this.drawMemoryRect(canvas, endpoint, block.description),
       this.drawMemoryAddress(canvas, startPoint, block.startAddress),
-      this.drawMemoryAddress(canvas, endPoint, block.endAddress),
+      this.drawMemoryAddress(canvas, endpoint, block.endAddress),
     ];
     if (!dynamic.showSize) return new Group(graphics);
     let size = Number(block.endAddress - block.startAddress);
-    if (dynamic.sizeStyle === 'outer') graphics.push(this.drawMemorySize(canvas, endPoint, size));
-    else graphics[0].text += ` (${Number.formatMemorySize(size)})`;
+    if (dynamic.sizeStyle === 'outer') graphics.push(this.drawMemorySize(canvas, endpoint, size));
+    else graphics[0].text += ` (${Common.formatMemorySize(size)})`;
     return new Group(graphics);
   }
 
@@ -2184,7 +2258,7 @@ var _this = (function () {return this;})();
     label.geometry = new Rect(upLineStartPoint.x - dynamic.labelSize.width / 2, upLineEndPoint.y, dynamic.labelSize.width, dynamic.labelSize.height);
     label.shadowColor = null;
     label.strokeThickness = 0;
-    label.text = Number.formatMemorySize(size);
+    label.text = Common.formatMemorySize(size);
     label.textSize = 12;
     label.fillColor = null;
     label.textHorizontalAlignment = HorizontalTextAlignment.Center;
