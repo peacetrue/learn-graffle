@@ -20,7 +20,200 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
-var _a;
+var __assign = (this && this.__assign) || function () {
+    __assign = Object.assign || function(t) {
+        for (var s, i = 1, n = arguments.length; i < n; i++) {
+            s = arguments[i];
+            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
+                t[p] = s[p];
+        }
+        return t;
+    };
+    return __assign.apply(this, arguments);
+};
+var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
+    if (pack || arguments.length === 2) for (var i = 0, l = from.length, ar; i < l; i++) {
+        if (ar || !(i in from)) {
+            if (!ar) ar = Array.prototype.slice.call(from, 0, i);
+            ar[i] = from[i];
+        }
+    }
+    return to.concat(ar || Array.prototype.slice.call(from));
+};
+var _a, _b;
+/** 日志级别 */
+var LoggerLevel;
+(function (LoggerLevel) {
+    LoggerLevel[LoggerLevel["OFF"] = 0] = "OFF";
+    LoggerLevel[LoggerLevel["ERROR"] = 1] = "ERROR";
+    LoggerLevel[LoggerLevel["WARN"] = 2] = "WARN";
+    LoggerLevel[LoggerLevel["INFO"] = 3] = "INFO";
+    LoggerLevel[LoggerLevel["DEBUG"] = 4] = "DEBUG";
+})(LoggerLevel || (LoggerLevel = {}));
+/** 日志类 */
+var Logger = /** @class */ (function () {
+    function Logger(category) {
+        this.category = category;
+    }
+    /** 记录内部日志 */
+    Logger.log = function () {
+        var args = [];
+        for (var _i = 0; _i < arguments.length; _i++) {
+            args[_i] = arguments[_i];
+        }
+        // @ts-ignore
+        if (Logger.enabledInnerLogger)
+            console.info.apply(console, args);
+    };
+    /** 获取日志，按日志分类缓存日志 */
+    Logger.getLogger = function (category) {
+        if (category === void 0) { category = Logger.functionCategory; }
+        Logger.log("Logger.getLogger: ".concat(category));
+        var logger = Logger.loggers[category];
+        Logger.log("category: ".concat(category, "=").concat(logger));
+        if (logger)
+            return logger;
+        logger = new Logger(category);
+        Logger.loggers[category] = logger;
+        Logger.log("category: ".concat(category, "=").concat(logger));
+        return logger;
+    };
+    /** 获取日志级别，默认使用根日志分类的基本 */
+    Logger.prototype.getLevel = function () {
+        for (var category in Logger.config) {
+            if (this.category.startsWith(category))
+                return Logger.config[category];
+        }
+        return Logger.config[Logger.CATEGORY_ROOT];
+    };
+    /** 是否启用了指定的日志级别 */
+    Logger.prototype.isLevelEnabled = function (level) {
+        // 配置的级别 >= 使用的级别
+        var thisLevel = this.getLevel();
+        Logger.log("isLevelEnabled: ".concat(LoggerLevel[thisLevel], " >= ").concat(LoggerLevel[level]));
+        return thisLevel >= level;
+    };
+    /** 记录日志信息 */
+    Logger.prototype.log = function (level, args) {
+        Logger.log("Logger.log: level=".concat(level, ", args=").concat(args));
+        if (this.isLevelEnabled(level)) {
+            var levelName = LoggerLevel[level];
+            var formattedLevelName = Logger.leftPad(levelName, 5, ' ');
+            var indent = "  ".repeat(Logger.functionHierarchy);
+            levelName = levelName.toLowerCase();
+            Logger.log("Logger.log: levelName=".concat(levelName, ", levelName in console="), levelName in console);
+            console[levelName in console ? levelName : "info"].apply(console, __spreadArray(["[".concat(formattedLevelName, "]"), indent], args, false));
+        }
+    };
+    Logger.leftPad = function (src, length, paddingChar) {
+        if (paddingChar === void 0) { paddingChar = ' '; }
+        if (src.length >= length)
+            return src;
+        return paddingChar.repeat(length - src.length) + src;
+    };
+    Logger.prototype.error = function () {
+        var args = [];
+        for (var _i = 0; _i < arguments.length; _i++) {
+            args[_i] = arguments[_i];
+        }
+        this.log(LoggerLevel.ERROR, args);
+    };
+    Logger.prototype.warn = function () {
+        var args = [];
+        for (var _i = 0; _i < arguments.length; _i++) {
+            args[_i] = arguments[_i];
+        }
+        this.log(LoggerLevel.WARN, args);
+    };
+    Logger.prototype.info = function () {
+        var args = [];
+        for (var _i = 0; _i < arguments.length; _i++) {
+            args[_i] = arguments[_i];
+        }
+        this.log(LoggerLevel.INFO, args);
+    };
+    Logger.prototype.debug = function () {
+        var args = [];
+        for (var _i = 0; _i < arguments.length; _i++) {
+            args[_i] = arguments[_i];
+        }
+        this.log(LoggerLevel.DEBUG, args);
+    };
+    Logger.proxy = function (name, global) {
+        if (global === void 0) { global = this; }
+        var value = global[name];
+        global["_".concat(name)] = value;
+        global[name] = Logger.proxyClass(value);
+    };
+    /**
+     * 代理对象实例上的方法
+     * @see https://stackoverflow.com/questions/5033836/adding-console-log-to-every-function-automatically
+     */
+    Logger.proxyInstance = function (object) {
+        return new Proxy(object, {
+            get: function (target, name, receiver) {
+                if (target.hasOwnProperty(name)) {
+                    return Reflect.get(target, name, receiver);
+                }
+                var value = target[name];
+                if (typeof value === "function") {
+                    return Logger.buildFunctionProxy(value, object.constructor.name, name.toString());
+                }
+                return value;
+            },
+        });
+    };
+    /** 代理类上的静态方法 */
+    Logger.proxyClass = function (object) {
+        var properties = Object.getOwnPropertyNames(object);
+        properties.filter(function (property) { return typeof object[property] === "function"; }).forEach(function (property) {
+            object[property] = Logger.buildFunctionProxy(object[property], object.name || object.constructor.name, property);
+        });
+        return object;
+    };
+    /**
+     * 代理方法
+     * @param func 要代理的函数
+     * @param ownerName 函数的所有者对象名称，通常是类名也可以设置为自定义名称
+     * @param functionName 函数名称
+     */
+    Logger.buildFunctionProxy = function (func, ownerName, functionName) {
+        if (ownerName === void 0) { ownerName = ""; }
+        if (functionName === void 0) { functionName = ""; }
+        return new Proxy(func, {
+            apply: function (target, thisArg, argumentsList) {
+                var name = ownerName || thisArg.constructor.name;
+                name += "." + (functionName || target.name);
+                var logger = Logger.getLogger(name);
+                Logger.functionCategory = name;
+                Logger.functionHierarchy++;
+                logger.info("".concat(name, "(arguments ").concat(argumentsList.length, ")"));
+                argumentsList.forEach(function (argument, index) { return logger.debug("[".concat(index, "]: ").concat(argument)); });
+                var result = target.apply(thisArg, argumentsList);
+                logger.debug("".concat(name, "(result): "), typeof result === "string" ? "'".concat(result, "'") : result);
+                Logger.functionHierarchy--;
+                return result;
+            }
+        });
+    };
+    /** 是否启用内部日志，仅针对 Logger 自身的方法 */
+    Logger.enabledInnerLogger = false;
+    /** 根日志分类 */
+    Logger.CATEGORY_ROOT = "ROOT";
+    /** 日志配置，不同的类和方法使用不同的日志级别 */
+    Logger.config = (_a = {},
+        _a[Logger.CATEGORY_ROOT] = LoggerLevel.DEBUG,
+        _a["Memory.incrementOrigin"] = LoggerLevel.INFO,
+        _a["Common"] = LoggerLevel.DEBUG,
+        _a);
+    /** 日志缓存，category 为 key */
+    Logger.loggers = {};
+    /** 当前函数所处的层级 */
+    Logger.functionHierarchy = 0;
+    /** 当前函数所处的日志分类 */
+    Logger.functionCategory = Logger.CATEGORY_ROOT;
+    return Logger;
+}());
 var Common = /** @class */ (function () {
     function Common() {
     }
@@ -33,10 +226,9 @@ var Common = /** @class */ (function () {
      * @return
      */
     Common.option = function (object, key, value) {
-        var _this = this;
-        console.info("option. object: ".concat(object, ", key: ").concat(key, ", value: ").concat(value));
+        var _this_1 = this;
         var actions = {
-            "Canvas": function (object, key, value) { return _this.canvasOption(object, key, value); },
+            "Canvas": function (object, key, value) { return _this_1.canvasOption(object, key, value); },
             "*": function (object, key, value) { return value === undefined ? object.userData[key] : object.setUserData(key, value); },
         };
         var className = object.constructor.name;
@@ -52,7 +244,6 @@ var Common = /** @class */ (function () {
      * @return
      */
     Common.canvasOption = function (canvas, key, value) {
-        console.info("canvasOption. canvas: ".concat(canvas, ", key: ").concat(key, ", value: ").concat(value));
         var options = this.canvasOptions[canvas.name];
         if (!options) {
             options = {};
@@ -92,13 +283,11 @@ var Common = /** @class */ (function () {
      * @return
      */
     Common.selectFile = function (types) {
-        var _this = this;
-        console.info("selectFile");
+        var _this_1 = this;
         var filePicker = new FilePicker();
         filePicker.types = types;
         return filePicker.show().then(function (response) {
-            console.info("selectFile response: ", response);
-            return _this.promiseUrlFetch(response[0]);
+            return _this_1.promiseUrlFetch(response[0]);
         });
     };
     /**
@@ -108,10 +297,9 @@ var Common = /** @class */ (function () {
      * @param locationKey 位置键
      */
     Common.selectFileAssociatively = function (object, locationKey) {
-        var _this = this;
-        console.info("selectFileAssociatively");
+        var _this_1 = this;
         return this.selectFile().then(function (response) {
-            _this.option(object, locationKey, response.url.toString());
+            _this_1.option(object, locationKey, response.url.toString());
             return response;
         });
     };
@@ -131,21 +319,33 @@ var Common = /** @class */ (function () {
      * @param locationKey 文件位置键
      */
     Common.readFileContentAssociatively = function (object, locationKey) {
-        var _this = this;
-        console.info("readFileContentAssociatively");
-        console.debug("app.optionKeyDown: ".concat(app.optionKeyDown));
+        var _this_1 = this;
         if (app.optionKeyDown) {
             this.option(object, locationKey, null);
             return Promise.reject("clear cache!");
         }
         var location = this.option(object, locationKey);
-        console.info("location: ", location);
         if (!location)
             return this.selectFileAssociatively(object, locationKey);
         return this.readFileContent(location).catch(function (response) {
             // response:  Error: 未能完成操作。（kCFErrorDomainCFNetwork错误1。）
             console.error("promiseUrlFetch response: ", response);
-            return _this.selectFileAssociatively(object, locationKey);
+            return _this_1.selectFileAssociatively(object, locationKey);
+        });
+    };
+    /**
+     * 选择性地读取文件内容。
+     *
+     * @param object 关联对象
+     * @param locationKey 文件位置键
+     * @param [content] 可选的内容
+     */
+    Common.readFileContentSelectively = function (object, locationKey, content) {
+        return (content
+            ? Common.promise({ data: content })
+            : Common.readFileContentAssociatively(object, locationKey))
+            .then(function (response) {
+            return __assign(__assign({}, response), { data: JSON.parse(response.data) });
         });
     };
     /**
@@ -157,20 +357,17 @@ var Common = /** @class */ (function () {
      * @param [length] 图形数目
      */
     Common.loadGraphicsText = function (graphics, locationKey, length) {
-        var _this = this;
-        console.info("loadGraphicsText");
-        console.debug("graphics.length: ".concat(graphics.length));
+        var _this_1 = this;
         var graphic = graphics[0];
         length = length || graphic.userData['length'] || 1;
         return this.readFileContentAssociatively(graphic, locationKey)
             .then(function (response) {
-            var canvas = _this.canvas();
+            var canvas = _this_1.canvas();
             var location = graphic.userData[locationKey];
             graphics = canvas.allGraphicsWithUserDataForKey(location, locationKey);
-            console.info("allGraphicsWithUserDataForKey.length: ".concat(graphics.length));
             if (graphics.length < length)
-                graphics = _this.duplicateGraphicToLayers(canvas, graphic, length);
-            _this.setGraphicsText(graphics, response.data);
+                graphics = _this_1.duplicateGraphicToLayers(canvas, graphic, length);
+            _this_1.setGraphicsText(graphics, response.data);
             return response;
         })
             .catch(function (response) {
@@ -184,7 +381,6 @@ var Common = /** @class */ (function () {
      * @param text 文本内容
      */
     Common.setGraphicsText = function (graphics, text) {
-        console.info("setGraphicsText");
         if (graphics.length === 1) {
             return graphics[0].text = text;
         }
@@ -222,7 +418,6 @@ var Common = /** @class */ (function () {
      * @return {void}
      */
     Common.duplicateGraphicToLayers = function (canvas, graphic, length) {
-        console.info("duplicateGraphicToLayers");
         var graphics = [graphic];
         var layerName = graphic.layer.name.split('-')[0];
         var prevLayer = graphic.layer;
@@ -249,12 +444,12 @@ var Common = /** @class */ (function () {
      * @param graphics  图形
      */
     Common.clearGraphicsText = function (graphics) {
-        var _this = this;
+        var _this_1 = this;
         if (graphics instanceof Array) {
-            return graphics.forEach(function (graphic) { return _this.clearGraphicsText(graphic); });
+            return graphics.forEach(function (graphic) { return _this_1.clearGraphicsText(graphic); });
         }
         if (graphics instanceof Group) {
-            graphics.graphics.forEach(function (graphic) { return _this.clearGraphicsText(graphic); });
+            graphics.graphics.forEach(function (graphic) { return _this_1.clearGraphicsText(graphic); });
         }
         else {
             graphics.strokeType && (graphics.text = "");
@@ -265,7 +460,7 @@ var Common = /** @class */ (function () {
      *
      * @param {Rect} rect 矩形
      * @param location 位置，top、middle、bottom、left、center、right
-     * @return {Point} 点
+     * @return 点
      */
     Common.pointOfRect = function (rect, location) {
         var parts = location.split('-');
@@ -296,7 +491,6 @@ var Common = /** @class */ (function () {
                 var horizontal = horizontals_1[_a];
                 var key = "".concat(vertical, "-").concat(horizontal);
                 points[key] = this.pointOfRect(rect, key);
-                // console.info(`${key}: ${points[key]}`);
             }
         }
         return points;
@@ -304,9 +498,9 @@ var Common = /** @class */ (function () {
     /**
      * 获取两点之间的中间点。
      *
-     * @param {Point} start 起点
-     * @param {Point} end 终点
-     * @return {Point} 中点
+     * @param start 起点
+     * @param end 终点
+     * @return 中点
      */
     Common.centerOfPoints = function (start, end) {
         return new Point((start.x + end.x) / 2, (start.y + end.y) / 2);
@@ -341,12 +535,12 @@ var Common = /** @class */ (function () {
      * @return {any}
      */
     Common.align = function (line) {
-        var _this = this;
+        var _this_1 = this;
         if (line instanceof Array)
-            return line.forEach(function (_line) { return _this.align(_line); });
+            return line.forEach(function (_line) { return _this_1.align(_line); });
         var points = line.points;
         if (points.length !== 3)
-            return console.error("points.length: ", points.length);
+            return;
         var position = this.getPosition(points[0], points[2], points[1]);
         if (position === 0)
             return;
@@ -408,7 +602,7 @@ var Common = /** @class */ (function () {
         var selection = window.selection;
         var graphics = selection.graphics;
         if (graphics.length === 0)
-            return console.warn("locateCenter: no selection.graphics");
+            return;
         window.setViewForCanvas(selection.canvas, window.zoom, graphics[0].geometry.center);
     };
     /**
@@ -418,12 +612,11 @@ var Common = /** @class */ (function () {
      * @param target 目标图形集合
      */
     Common.addConnected = function (source, target) {
-        var _this = this;
-        console.info("addConnected. target.length=".concat(target.length));
+        var _this_1 = this;
         if (!source)
             return;
         if (source instanceof Array) {
-            source.forEach(function (item) { return _this.addConnected(item, target); });
+            source.forEach(function (item) { return _this_1.addConnected(item, target); });
         }
         else {
             target.push(source);
@@ -441,10 +634,8 @@ var Common = /** @class */ (function () {
      * @param graphics 图形集合
      */
     Common.highlightConnected = function (graphics) {
-        console.info("highlightConnected. graphics.length=".concat(graphics.length));
         var target = [];
         this.addConnected(graphics, target);
-        console.info("target.length=".concat(target.length));
         document.windows[0].selection.view.select(target, false);
     };
     /**
@@ -464,15 +655,12 @@ var Common = /** @class */ (function () {
     // eval 时需要注意绑定的对象
     Common.loadClass = function (name, path) {
         if (path === void 0) { path = "libs/".concat(name, ".js"); }
-        console.info("loadLib: ", path);
         if (name in Object) {
-            console.info("lib '".concat(path, "' loaded"));
             return new Promise(function (resolve, reject) { return resolve(Object[name]); });
         }
         return this.promiseUrlFetch(this.plugIn.resourceNamed(path))
             .then(function (response) {
             var content = response.data;
-            console.info("lib '".concat(path, "': \n"), content);
             eval(content);
             eval("Object[name] = ".concat(name));
             return Object[name];
@@ -485,13 +673,11 @@ var Common = /** @class */ (function () {
             : this.moveSolid(graphic, distance);
     };
     Common.moveLine = function (line, distance) {
-        console.debug("move line by ".concat(distance));
         line.points = line.points.map(function (item) { return item.add(distance); });
         line.head = null;
         line.tail = null;
     };
     Common.moveSolid = function (solid, distance) {
-        console.debug("move solid by ".concat(distance));
         solid.geometry = solid.geometry.offsetBy(distance.x, distance.y);
     };
     /** TODO 删除元素很慢 */
@@ -514,8 +700,28 @@ var Common = /** @class */ (function () {
         layer.name = name;
         return layer;
     };
+    /**
+     * 格式化内存空间。
+     * @param  sizeInBytes 内存空间
+     * @returns  带单位的内存空间
+     */
+    Common.formatMemorySize = function (sizeInBytes) {
+        var units = ["B", "KB", "MB", "GB", "TB", "PB"];
+        var size = sizeInBytes;
+        var unitIndex = 0;
+        while (size >= 1024 && unitIndex < units.length - 1) {
+            size /= 1024;
+            unitIndex++;
+        }
+        return "".concat(size.toFixed(2), " ").concat(units[unitIndex]);
+    };
+    Common.leftPad = function (src, length, paddingChar) {
+        if (paddingChar === void 0) { paddingChar = ' '; }
+        if (src.length >= length)
+            return src;
+        return paddingChar.repeat(length - src.length) + src;
+    };
     Common.test = function () {
-        console.info("PeaceTable: ", Object.PeaceTable);
     };
     /** 保存各 canvas 的配置，以 canvas.name 为 key */
     Common.canvasOptions = {};
@@ -539,12 +745,10 @@ var IndexSwitcher = /** @class */ (function () {
         return this.current === this.end - 1;
     };
     IndexSwitcher.prototype.prev = function () {
-        console.debug("IndexSwitcher.prev");
         this.current = this.isStart() ? this.end : this.current - this.step;
         return this.current;
     };
     IndexSwitcher.prototype.next = function () {
-        console.debug("IndexSwitcher.next");
         this.current = this.isEnd() ? this.start : this.current + this.step;
         return this.current;
     };
@@ -569,10 +773,9 @@ var StepperContext = /** @class */ (function () {
         return this.graphics[key];
     };
     StepperContext.prototype.clear = function () {
-        var _this = this;
-        console.info("StepperContext.clear: ".concat(Object.keys(this.layer.graphics).length));
+        var _this_1 = this;
         this.layer = Common.clearLayer(this.layer, 100);
-        Object.keys(this.graphics).forEach(function (key) { return delete _this.graphics[key]; });
+        Object.keys(this.graphics).forEach(function (key) { return delete _this_1.graphics[key]; });
         return this;
     };
     return StepperContext;
@@ -586,11 +789,8 @@ var Stepper = /** @class */ (function () {
         this.settings = [];
     }
     Stepper.switch = function (graphic) {
-        console.info("static Stepper.switch");
         var canvasName = Common.canvas().name;
-        console.debug("canvasName: ".concat(canvasName));
         var stepper = Stepper.steppers[canvasName];
-        console.debug("stepper: ".concat(stepper));
         // shift 强制重新配置
         if (app.shiftKeyDown || !stepper) {
             if (stepper)
@@ -602,7 +802,6 @@ var Stepper = /** @class */ (function () {
         stepper.switch();
     };
     Stepper.init = function (ctxName) {
-        console.info("static Stepper.init: ".concat(ctxName));
         var stepper = new Stepper();
         stepper.context = new StepperContext();
         stepper.context.stepper = stepper;
@@ -614,8 +813,8 @@ var Stepper = /** @class */ (function () {
         return stepper;
     };
     Stepper.getLayer = function () {
-        var _this = this;
-        var layer = Common.canvas().layers.find(function (layer) { return layer.name === _this.layerName; });
+        var _this_1 = this;
+        var layer = Common.canvas().layers.find(function (layer) { return layer.name === _this_1.layerName; });
         if (!layer) {
             layer = Common.canvas().newLayer();
             layer.name = this.layerName;
@@ -623,22 +822,20 @@ var Stepper = /** @class */ (function () {
         return layer;
     };
     Stepper.prototype.switch = function () {
-        console.info("Stepper.switch");
         this.invoke(app.optionKeyDown ? this.indexSwitcher.prev() : this.indexSwitcher.next());
     };
     Stepper.prototype.invoke = function (index) {
-        var _this = this;
+        var _this_1 = this;
         if (index === void 0) { index = this.indexSwitcher.current; }
-        console.info("Stepper.invoke. index: ".concat(index));
-        this.settings[index].forEach(function (handler) { return handler(_this.context); });
+        this.settings[index].forEach(function (handler) { return handler(_this_1.context); });
     };
     Stepper.prototype.autoSwitch = function (interval) {
-        var _this = this;
+        var _this_1 = this;
         if (interval === void 0) { interval = 1; }
         this.switch();
         if (this.indexSwitcher.isEnd())
             return;
-        Timer.once(interval, function () { return _this.autoSwitch(); });
+        Timer.once(interval, function () { return _this_1.autoSwitch(); });
     };
     Stepper.clear = function (ctx) {
         ctx.clear();
@@ -663,17 +860,15 @@ var Make = /** @class */ (function () {
     function Make() {
     }
     Make.setup = function (stepper) {
-        console.info("Make.setup");
         var context = stepper.context;
         context.refer = (Common.selectedGraphic() || Common.canvas().graphicWithName(Make.referName));
         context.origin = context.refer.geometry.origin.add(new Point(context.refer.geometry.width, 0));
         context.lineHeight = Make.calLineHeight(context.refer);
-        console.debug("context: ".concat(context));
         var moveStep1 = Make.moveLinePointer;
         var moveStep2 = Make.buildMoveLinePointer(2);
         var moveStep3 = Make.buildMoveLinePointer(3.5);
-        var moveStep5 = Make.buildMoveLinePointer(7);
-        var moveStep_10 = Make.buildMoveLinePointer(-10);
+        var moveStep7 = Make.buildMoveLinePointer(7);
+        var backStep10 = Make.buildMoveLinePointer(-10);
         var settings = [];
         settings.push([Stepper.clear, Stepper.next]);
         settings.push([Make.newLinePointer]);
@@ -684,8 +879,8 @@ var Make = /** @class */ (function () {
         settings.push([moveStep1, function (ctx) { return Make.drawText(ctx, "phases.1:"); }]);
         settings.push([moveStep2, function (ctx) { return Make.drawText(ctx, "phases.2:"); }]);
         settings.push([moveStep2, function (ctx) { return Make.drawText(ctx, "phases.case: phases.1 phases.2"); }]);
-        settings.push([moveStep5, Make.immediateAssign3]);
-        settings.push([moveStep_10, function (ctx) { return Make.drawText(ctx, "  phases.1"); }]);
+        settings.push([moveStep7, Make.immediateAssign3]);
+        settings.push([backStep10, function (ctx) { return Make.drawText(ctx, "  phases.1"); }]);
         settings.push([moveStep2, function (ctx) { return Make.drawText(ctx, "   phases.2"); }]);
         settings.push([moveStep3, function (ctx) { return Make.drawText(ctx, "   phases.1 phases.2"); }]);
         settings.push([moveStep1, function (ctx) { return Make.drawText(ctx, "   phases.immediate: 3"); }]);
@@ -699,7 +894,6 @@ var Make = /** @class */ (function () {
         return totalLineHeight / lineCount;
     };
     Make.newLinePointer = function (ctx) {
-        console.info("static Make.newLinePointer");
         var line = Common.canvas().newLine();
         var start = ctx.origin.add(new Point(-100, ctx.refer.textVerticalPadding + ctx.lineHeight / 2 + ctx.lineHeight * 2));
         line.points = [start, start.subtract(new Point(Make.linePointerWidth, 0))];
@@ -734,7 +928,6 @@ var Make = /** @class */ (function () {
         return line;
     };
     Make.newImmediate = function (ctx) {
-        console.info("static Make.newImmediate");
         var immediate = Make.drawText(ctx, "phases.immediate", Make.immediate);
         var value1 = Make.drawText(ctx, "1", Make.value1, new Point(150, 0));
         Make.connect(ctx, immediate, value1, Make.immediateLine);
@@ -792,7 +985,6 @@ var LayerSwitcher = /** @class */ (function () {
      * @param [graphic] 图形，该图形上记录着图层切换参数
      */
     LayerSwitcher.switch = function (graphic) {
-        console.info("static LayerSwitcher.switch");
         graphic && this.layerNamePrefixKey in graphic.userData
             ? this.switchByGraphic(graphic)
             : this.switchByForm();
@@ -801,12 +993,9 @@ var LayerSwitcher = /** @class */ (function () {
      * 切换图层通过表单参数。
      */
     LayerSwitcher.switchByForm = function () {
-        var _this = this;
-        console.info("static LayerSwitcher.switchByForm");
+        var _this_1 = this;
         var canvasName = Common.canvas().name;
-        console.debug("canvasName: ".concat(canvasName));
         var layerSwitcher = LayerSwitcher.layerSwitchers[canvasName];
-        console.debug("layerSwitcher: ".concat(layerSwitcher));
         // shift 强制重新配置
         if (app.shiftKeyDown || !layerSwitcher) {
             var form = new Form();
@@ -816,7 +1005,7 @@ var LayerSwitcher = /** @class */ (function () {
             return form.show("配置图层切换参数", "确定")
                 .then(function (response) {
                 var values = response.values;
-                LayerSwitcher.layerSwitchers[canvasName] = LayerSwitcher.init(values[_this.layerNamePrefixKey], values[_this.layerSwitchModeKey], JSON.parse(values[_this.layerCustomSettingsKey]));
+                LayerSwitcher.layerSwitchers[canvasName] = LayerSwitcher.init(values[_this_1.layerNamePrefixKey], values[_this_1.layerSwitchModeKey], JSON.parse(values[_this_1.layerCustomSettingsKey]));
             })
                 .catch(function (response) { return console.error("error:", response); });
         }
@@ -828,9 +1017,7 @@ var LayerSwitcher = /** @class */ (function () {
      * @param graphic 图形，该图形上记录着图层切换参数
      */
     LayerSwitcher.switchByGraphic = function (graphic) {
-        console.info("static LayerSwitcher.switchByGraphic");
         var layerSwitcher = LayerSwitcher.layerSwitchers[graphic.name];
-        console.debug("layerSwitcher: ".concat(layerSwitcher));
         if (app.shiftKeyDown || !layerSwitcher) {
             var layerNamePrefix = graphic.userData[this.layerNamePrefixKey];
             var layerSwitchMode = LayerSwitchMode[graphic.userData[this.layerSwitchModeKey]];
@@ -842,8 +1029,6 @@ var LayerSwitcher = /** @class */ (function () {
     LayerSwitcher.init = function (layerNamePrefix, layerSwitchMode, layerCustomSettings) {
         if (layerNamePrefix === void 0) { layerNamePrefix = LayerSwitcher.layerNamePrefix; }
         if (layerSwitchMode === void 0) { layerSwitchMode = LayerSwitchMode.rotate; }
-        console.info("static LayerSwitcher.init");
-        console.debug("layerNamePrefix: ".concat(layerNamePrefix, ", layerSwitchMode: ").concat(layerSwitchMode));
         var layerSwitcher = new LayerSwitcher();
         // 图层顺序：底部的图层排在前面，顶上的图层排在后面
         layerSwitcher.layers = Common.canvas().layers.filter(function (layer) { return layer.name.startsWith(layerNamePrefix); }).reverse();
@@ -857,24 +1042,21 @@ var LayerSwitcher = /** @class */ (function () {
             layerSwitcher.settings = layerCustomSettings;
         }
         layerSwitcher.settings.unshift([]); //最初不显示任何图层
-        console.debug("settings: ".concat(JSON.stringify(layerSwitcher.settings)));
         layerSwitcher.indexSwitcher = new IndexSwitcher(0, layerSwitcher.settings.length);
         layerSwitcher.show();
         return layerSwitcher;
     };
     LayerSwitcher.prototype.switch = function () {
-        console.info("LayerSwitcher.switch");
         this.show(app.optionKeyDown ? this.indexSwitcher.prev() : this.indexSwitcher.next());
     };
     LayerSwitcher.prototype.show = function (index) {
-        var _this = this;
+        var _this_1 = this;
         if (index === void 0) { index = this.indexSwitcher.current; }
-        console.info("LayerSwitcher.show: ".concat(index));
         this.hiddenAll();
         index in this.settings
             && this.settings[index]
-                .filter(function (item) { return item in _this.layers; })
-                .forEach(function (item) { return _this.layers[item].visible = true; });
+                .filter(function (item) { return item in _this_1.layers; })
+                .forEach(function (item) { return _this_1.layers[item].visible = true; });
     };
     LayerSwitcher.prototype.hiddenAll = function () {
         for (var _i = 0, _a = this.layers; _i < _a.length; _i++) {
@@ -891,23 +1073,27 @@ var LayerSwitcher = /** @class */ (function () {
     LayerSwitcher.layerNamePrefix = "layer";
     LayerSwitcher.layerSwitchMode = LayerSwitchMode.increase;
     LayerSwitcher.layerCustomSettings = [[0]];
-    LayerSwitcher.layerArguments = (_a = {},
-        _a[LayerSwitcher.layerNamePrefixKey] = LayerSwitcher.layerNamePrefix,
-        _a[LayerSwitcher.layerSwitchModeKey] = LayerSwitcher.layerSwitchMode,
-        _a[LayerSwitcher.layerCustomSettingsKey] = LayerSwitcher.layerCustomSettings,
-        _a);
+    LayerSwitcher.layerArguments = (_b = {},
+        _b[LayerSwitcher.layerNamePrefixKey] = LayerSwitcher.layerNamePrefix,
+        _b[LayerSwitcher.layerSwitchModeKey] = LayerSwitcher.layerSwitchMode,
+        _b[LayerSwitcher.layerCustomSettingsKey] = LayerSwitcher.layerCustomSettings,
+        _b);
     LayerSwitcher.layerSwitchers = {};
     return LayerSwitcher;
 }());
 var PeaceTable = /** @class */ (function () {
-    function PeaceTable(cellSize, cellTextSize, cellFillColor) {
+    function PeaceTable() {
         this.cellSize = new Size(200, 70);
         this.cellTextSize = 12;
         this.cellFillColor = Color.RGB(1.0, 1.0, 0.75, null); // 黄色
-        this.cellSize = cellSize;
-        this.cellTextSize = cellTextSize;
-        this.cellFillColor = cellFillColor;
     }
+    PeaceTable.instance = function (cellSize, cellTextSize, cellFillColor) {
+        var table = new PeaceTable();
+        table.cellSize = cellSize;
+        table.cellTextSize = cellTextSize;
+        table.cellFillColor = cellFillColor;
+        return table;
+    };
     /**
      * 绘制表格。
      *
@@ -917,12 +1103,11 @@ var PeaceTable = /** @class */ (function () {
      * @return 形状
      */
     PeaceTable.prototype.drawTable = function (canvas, origin, texts) {
-        var _this = this;
-        console.info("drawTable: ", texts.length);
+        var _this_1 = this;
         var increase = new Point(0, this.cellSize.height);
         return new Group(texts.map(function (item, index) {
             origin = index === 0 ? origin : origin = origin.add(increase);
-            return _this.drawRow(canvas, origin, item);
+            return _this_1.drawRow(canvas, origin, item);
         }));
     };
     /**
@@ -934,11 +1119,10 @@ var PeaceTable = /** @class */ (function () {
      * @return 形状
      */
     PeaceTable.prototype.drawRow = function (canvas, origin, texts) {
-        var _this = this;
-        console.info("drawRow: ", texts.length);
+        var _this_1 = this;
         var increase = new Point(this.cellSize.width, 0);
         return new Group(texts.map(function (text, index) {
-            return _this.drawCell(canvas, index === 0 ? origin : origin = origin.add(increase), text);
+            return _this_1.drawCell(canvas, index === 0 ? origin : origin = origin.add(increase), text);
         }));
     };
     PeaceTable.bolder = function (group) {
@@ -958,11 +1142,10 @@ var PeaceTable = /** @class */ (function () {
      * @return 形状
      */
     PeaceTable.prototype.drawColumn = function (canvas, origin, texts) {
-        var _this = this;
-        console.info("drawColumn: ".concat(texts.length));
+        var _this_1 = this;
         var increase = new Point(0, this.cellSize.height);
         return new Group(texts.map(function (text, index) {
-            return _this.drawCell(canvas, index === 0 ? origin : origin = origin.add(increase), text);
+            return _this_1.drawCell(canvas, index === 0 ? origin : origin = origin.add(increase), text);
         }));
     };
     /**
@@ -974,7 +1157,6 @@ var PeaceTable = /** @class */ (function () {
      * @return 形状
      */
     PeaceTable.prototype.drawCell = function (canvas, origin, text) {
-        console.debug("drawCell: ", text);
         var shape = canvas.newShape();
         shape.geometry = new Rect(origin.x, origin.y, this.cellSize.width, this.cellSize.height);
         shape.shadowColor = null;
@@ -990,16 +1172,14 @@ var PeaceTable = /** @class */ (function () {
         return shape;
     };
     PeaceTable.extractGraphicTexts = function (graphic) {
-        var _this = this;
+        var _this_1 = this;
         var texts = [];
         if (!(graphic instanceof Array))
             graphic = [graphic];
-        console.info("extractGraphicTexts: graphic.length=", graphic.length);
-        graphic.forEach(function (item) { return _this.extractGraphicTextsRecursively(item, texts); });
+        graphic.forEach(function (item) { return _this_1.extractGraphicTextsRecursively(item, texts); });
         return texts;
     };
     PeaceTable.extractGraphicTextsRecursively = function (graphic, texts) {
-        console.info("extractGraphicTextsRecursively: ", graphic);
         if (graphic instanceof Solid) {
             texts.push(this.extractSolidText(graphic));
         }
@@ -1016,7 +1196,6 @@ var PeaceTable = /** @class */ (function () {
         }
     };
     PeaceTable.extractTableTexts = function (table) {
-        console.info("extractTableTexts: ", table);
         var texts = [];
         for (var i = 0; i < table.rows; i++) {
             texts.push([]);
@@ -1028,11 +1207,10 @@ var PeaceTable = /** @class */ (function () {
         return texts;
     };
     PeaceTable.extractSolidText = function (solid) {
-        console.debug("extractSolidText: ".concat(solid.text));
         return solid.text;
     };
-    PeaceTable.defaults = new PeaceTable(new Size(200, 70), 12, Color.RGB(1.0, 1.0, 0.75, null));
-    PeaceTable.small = new PeaceTable(new Size(200, 20), 12, Color.RGB(1.0, 1.0, 0.75, null));
+    PeaceTable.defaults = PeaceTable.instance(new Size(200, 70), 12, Color.RGB(1.0, 1.0, 0.75, null));
+    PeaceTable.small = PeaceTable.instance(new Size(200, 20), 12, Color.RGB(1.0, 1.0, 0.75, null));
     PeaceTable.cellFillColors = {
         "[anon]": Color.RGB(0.75, 1.0, 0.75, null),
         "": Color.RGB(0.8, 0.8, 0.8, null),
@@ -1040,11 +1218,362 @@ var PeaceTable = /** @class */ (function () {
     };
     return PeaceTable;
 }());
+/**
+ * 内存块。
+ */
+var MemoryBlock = /** @class */ (function () {
+    function MemoryBlock(startAddress, endAddress, description) {
+        this.startAddress = startAddress;
+        this.endAddress = endAddress;
+        this.description = description;
+    }
+    MemoryBlock.prototype.size = function () {
+        return MemoryBlock.subtract(this.endAddress, this.startAddress);
+    };
+    MemoryBlock.prototype.toString = function () {
+        return "'".concat(this.description, "':").concat(this.startAddress, "~").concat(this.endAddress);
+    };
+    MemoryBlock.subtract = function (left, right) {
+        return Number(BigInt(left) - BigInt(right));
+    };
+    /** 将记录转换为内存块对象 */
+    MemoryBlock.wraps = function (object) {
+        var _this_1 = this;
+        return object.map(function (item) { return _this_1.wrap(item); });
+    };
+    /** 将记录转换为内存块对象 */
+    MemoryBlock.wrap = function (object) {
+        return object instanceof MemoryBlock ? object
+            : new MemoryBlock(parseInt(object['startAddress']), parseInt(object['endAddress']), object['description']);
+    };
+    /** 按内存地址升序排列 */
+    MemoryBlock.ascend = function (blocks) {
+        blocks.sort(function (left, right) { return MemoryBlock.subtract(left.startAddress, right.startAddress); });
+    };
+    /** 按内存地址降序排列 */
+    MemoryBlock.descend = function (blocks) {
+        blocks.sort(function (left, right) { return MemoryBlock.subtract(right.startAddress, left.startAddress); });
+    };
+    /**
+     * 对齐内存块集合，此函数要求内存块集合已有序排列。
+     * 内存地址应该是连续的，在空缺处补齐。
+     *
+     * @param blocks 内存块集合
+     * @param [asc] 内存块集合是否升序排列
+     */
+    MemoryBlock.padding = function (blocks, asc) {
+        if (asc === void 0) { asc = true; }
+        for (var i = 1; i < blocks.length; i++) {
+            var prev = blocks[i - 1], curr = blocks[i];
+            //地址不连续，补齐空缺
+            if (asc) {
+                if (prev.endAddress < curr.startAddress) {
+                    blocks.splice(i, 0, new MemoryBlock(prev.endAddress, curr.startAddress));
+                    i++;
+                }
+            }
+            else {
+                if (prev.startAddress > curr.endAddress) {
+                    blocks.splice(i, 0, new MemoryBlock(curr.endAddress, prev.startAddress));
+                    i++;
+                }
+            }
+        }
+    };
+    /**
+     * 合并相同描述的相邻内存块，此函数要求内存块集合已有序排列。
+     *
+     * @param blocks 内存块集合
+     */
+    MemoryBlock.merge = function (blocks) {
+        for (var i = 1; i < blocks.length; i++) {
+            var prev = blocks[i - 1], curr = blocks[i];
+            if (prev.description === curr.description) {
+                prev.endAddress = curr.endAddress; // 上一块的结束地址指向当前块的结束地址
+                blocks.splice(i, 1); // 删除当前块
+                i--;
+            }
+        }
+    };
+    return MemoryBlock;
+}());
+/** 内存绘制方向 */
+var MemoryDirection;
+(function (MemoryDirection) {
+    MemoryDirection[MemoryDirection["bottom_up"] = 0] = "bottom_up";
+    MemoryDirection[MemoryDirection["left_right"] = 1] = "left_right";
+})(MemoryDirection || (MemoryDirection = {}));
+var Memory = /** @class */ (function () {
+    function Memory() {
+        this.table = PeaceTable.small;
+        this.direction = MemoryDirection.bottom_up; //绘制方向
+        this.showAddress = true; // 是否显示地址
+        this.addressLineLength = 50;
+        this.addressLabelSize = new Size(150, 20);
+        this.addressLabelTextBase = 16; // 标签文本显示内存地址时使用的进制，栈时使用 10 进制，其他使用 16 进制
+        this.addressLabelTextLength = 64 / 8 * 2; // 64 位系统使用 16 进制表示的长度
+        this.showSize = true; // 是否显示占用空间
+        this.sizeStyle = "inner"; // 占用空间显示样式：outer、inner
+    }
+    Memory.instance = function () {
+        return new Memory();
+    };
+    Memory.instanceAbstractly = function () {
+        var memory = new Memory();
+        memory.showAddress = false;
+        memory.showSize = false;
+        return memory;
+    };
+    Memory.instanceHorizontal = function () {
+        var memory = new Memory();
+        memory.direction = MemoryDirection.left_right;
+        memory.addressLineLength = 25;
+        memory.addressLabelTextBase = 10;
+        memory.showSize = false;
+        return memory;
+    };
+    Memory.buildBlockIncrementers = function () {
+        var incrementers = [];
+        incrementers[MemoryDirection.bottom_up] = function (origin, memory) {
+            return origin.add(new Point(0, memory.table.cellSize.height));
+        };
+        incrementers[MemoryDirection.left_right] = function (origin, memory) {
+            return origin.add(new Point(memory.table.cellSize.width, 0));
+        };
+        return incrementers;
+    };
+    Memory.buildAddressLineIncrementers = function () {
+        var incrementers = [];
+        incrementers[MemoryDirection.bottom_up] = function (origin, memory) {
+            return origin.subtract(new Point(memory.addressLineLength, 0));
+        };
+        incrementers[MemoryDirection.left_right] = function (origin, memory) {
+            return origin.subtract(new Point(0, memory.addressLineLength));
+        };
+        return incrementers;
+    };
+    Memory.buildAddressLabelIncrementers = function () {
+        var incrementers = [];
+        incrementers[MemoryDirection.bottom_up] = function (origin, memory) {
+            return origin.subtract(new Point(memory.addressLabelTextLength / 2 * 8, 0));
+        };
+        incrementers[MemoryDirection.left_right] = function (origin, memory) {
+            return origin.subtract(new Point(0, 12 / 2));
+        };
+        return incrementers;
+    };
+    Memory.prototype.incrementOrigin = function (increments, origin) {
+        return increments[this.direction](origin, this);
+    };
+    Memory.prototype.getNextBlockOrigin = function (origin) {
+        return this.incrementOrigin(Memory.blockIncrementers, origin);
+    };
+    Memory.prototype.getLineEndpoint = function (origin) {
+        return this.incrementOrigin(Memory.addressLineIncrementers, origin);
+    };
+    Memory.prototype.getAddressLabelOrigin = function (origin) {
+        return this.incrementOrigin(Memory.addressLabelIncrementers, origin);
+    };
+    /**
+     * 基于内存映射，绘制虚拟内存。
+     *
+     * @param canvas 画布
+     * @param origin 起点
+     * @param [content] 内容
+     * @return  虚拟内存图
+     */
+    Memory.prototype.drawMemoryForMaps = function (canvas, origin, content) {
+        var _this_1 = this;
+        // readFileContentForGraphic(canvas, "maps-location")
+        return (content ? Common.promise({ data: content }) : Common.selectFile())
+            // return (location ? common.readFileContent(location) : common.selectFile())
+            .then(function (response) {
+            var blocks = Memory.resolveMaps(response.data);
+            blocks.unshift(new MemoryBlock(BigInt(0), blocks[0].startAddress)); // 从 0 开始显示
+            blocks.push(new MemoryBlock(blocks[blocks.length - 1].endAddress, // bigint 和 bigint 才能相减求 size
+            BigInt("0xffffffffffffffff")));
+            blocks = MemoryBlock.padding(MemoryBlock.descend(blocks));
+            blocks = MemoryBlock.merge(blocks);
+            return _this_1.drawMemoryBlocks(canvas, origin, blocks);
+        })
+            .catch(function (response) {
+        });
+    };
+    /**
+     * 解析内存映射。
+     *
+     * @param content 内存映射内容
+     * @return  内存块
+     */
+    Memory.resolveMaps = function (content) {
+        //1                                  2     3         4      5        6
+        //561d970c5000-561d970c6000          r--p  00000000  08:03  1581273  /usr/lib/jvm/java-17-openjdk-amd64/bin/java
+        var lines = content.split("\n");
+        // blocks.unshift(new MemoryBlock(
+        //   blocks[blocks.length - 1].endAddress,// bigint 和 bigint 才能相减求 size
+        //   BigInt("0xffffffffffffffff"),// 截止到 16 个 f，数值溢出，需要使用 bigint
+        // ));
+        // blocks.push(new MemoryBlock(BigInt(0), blocks[0].startAddress));// 从 0 开始显示
+        return lines.filter(function (line) { return line; })
+            .map(function (line) { return line.split(/ +/); })
+            .map(function (cells) {
+            var addresses = cells[0].split("-");
+            // 16 个 f 需要使用 bigint 才能表示
+            return new MemoryBlock(BigInt(parseInt(addresses.shift(), 16)), BigInt(parseInt(addresses.shift(), 16)), (cells[5] || "").split("/").pop() || "[anon]");
+        });
+    };
+    /**
+     * 基于内存映射，绘制虚拟内存。
+     *
+     * @param canvas 画布
+     * @param origin 起点
+     * @param [content] 内容
+     * @return 虚拟内存图
+     */
+    Memory.prototype.drawMemory = function (canvas, origin, content) {
+        var _this_1 = this;
+        if (canvas === void 0) { canvas = Common.canvas(); }
+        if (origin === void 0) { origin = Common.windowCenterPoint(); }
+        return Common.readFileContentSelectively(canvas, "drawMemory", content)
+            .then(function (response) { return _this_1.drawMemoryBlocks(canvas, origin, MemoryBlock.wraps(response.data)); })
+            .catch(function (response) { return Logger.getLogger().error(response); });
+    };
+    /**
+     * 绘制虚拟内存单元，从下往上绘制。
+     *
+     * @param canvas 画布
+     * @param origin 起点，矩形的左下点
+     * @param  blocks 内存块集合
+     * @return  绘制的图形
+     */
+    Memory.prototype.drawMemoryBlocks = function (canvas, origin, blocks) {
+        var _this_1 = this;
+        MemoryBlock.descend(blocks);
+        MemoryBlock.padding(blocks, false);
+        this.addressLabelTextLength = String(blocks[0].endAddress).length;
+        // MemoryBlock.merge(blocks);
+        var array = blocks.map(function (block, index) {
+            if (index !== 0)
+                origin = _this_1.getNextBlockOrigin(origin);
+            // let prev = blocks[index - 1], curr = blocks[index];
+            // if (prev.endAddress < curr.startAddress) {
+            //   origin = origin.subtract(new Point(0, this.table.cellSize.height));
+            // } else if (prev.endAddress > curr.startAddress) {
+            //   origin = origin.add(new Point(0, this.table.cellSize.height / 2));
+            // }
+            return _this_1.drawMemoryBlock(canvas, origin, block);
+        });
+        return new Group(array);
+    };
+    /**
+     * 绘制虚拟内存单元，从下往上绘制。
+     *
+     * @param canvas 画布
+     * @param origin 起点，矩形左下角处位置
+     * @param block 内存块
+     * @return  绘制的图形
+     */
+    Memory.prototype.drawMemoryBlock = function (canvas, origin, block) {
+        var cell = this.table.drawCell(canvas, origin, block.description);
+        var endPoint = this.getNextBlockOrigin(origin);
+        var graphics = [cell];
+        if (this.showAddress) {
+            graphics.push(this.drawMemoryAddress(canvas, origin, block.endAddress));
+            graphics.push(this.drawMemoryAddress(canvas, endPoint, block.startAddress));
+        }
+        if (this.showSize) {
+            var size = block.size();
+            if (this.sizeStyle === 'outer')
+                graphics.push(this.drawMemorySize(canvas, endPoint, size));
+            else
+                cell.text += " (".concat(Common.formatMemorySize(size), ")");
+        }
+        return new Group(graphics);
+    };
+    /**
+     * 绘制虚拟内存单元地址。
+     *
+     * @param canvas 画布
+     * @param origin 起点
+     * @param address 地址
+     * @return 绘制的图形
+     */
+    Memory.prototype.drawMemoryAddress = function (canvas, origin, address) {
+        var line = canvas.newLine();
+        line.points = [origin, this.getLineEndpoint(origin)];
+        line.shadowColor = null;
+        var formattedAddress = this.formatMemoryAddress(address);
+        var labelOrigin = this.getAddressLabelOrigin(line.points[1]);
+        return new Group([line, canvas.addText(formattedAddress, labelOrigin)]);
+    };
+    /**
+     * 格式化内存地址。
+     *
+     * PlugIn.find('com.github.peacetrue.learn.graffle').library('memory').formatMemoryAddress(bigint("0xffffffffffffffff"))
+     *
+     * @param address 内存地址
+     * @return 内存地址描述
+     */
+    Memory.prototype.formatMemoryAddress = function (address) {
+        var text = address < 0 ? '-' : ''; //符号位
+        if (this.addressLabelTextBase === 16)
+            text += '0x'; //16 进制标志
+        var absAddress = address > 0 ? address : -address;
+        var addressString = absAddress.toString(this.addressLabelTextBase);
+        return text + Common.leftPad(addressString, this.addressLabelTextLength, '0').toUpperCase();
+    };
+    /**
+     * 绘制内存空间尺寸。
+     *
+     * @param canvas 画布
+     * @param origin 位置
+     * @param size 空间尺寸
+     * @return 绘制的图形
+     */
+    Memory.prototype.drawMemorySize = function (canvas, origin, size) {
+        var upLine = canvas.newLine();
+        upLine.shadowColor = null;
+        var upLineStartPoint = new Point(origin.x - this.addressLineLength - this.addressLabelSize.width / 2, origin.y + this.addressLabelSize.height / 2);
+        var upLineEndPoint = new Point(upLineStartPoint.x, upLineStartPoint.y + this.table.cellSize.height / 2 - this.addressLabelSize.height);
+        upLine.points = [upLineStartPoint, upLineEndPoint];
+        upLine.headType = "FilledArrow";
+        var label = canvas.newShape();
+        label.geometry = new Rect(upLineStartPoint.x - this.addressLabelSize.width / 2, upLineEndPoint.y, this.addressLabelSize.width, this.addressLabelSize.height);
+        label.shadowColor = null;
+        label.strokeThickness = 0;
+        label.text = Common.formatMemorySize(size);
+        label.textSize = 12;
+        label.fillColor = null;
+        label.textHorizontalAlignment = HorizontalTextAlignment.Center;
+        var bottomLine = canvas.newLine();
+        bottomLine.shadowColor = null;
+        var bottomLineStartPoint = new Point(upLineStartPoint.x, origin.y + this.table.cellSize.height - this.addressLabelSize.height / 2);
+        var bottomLineEndPoint = new Point(bottomLineStartPoint.x, bottomLineStartPoint.y - this.table.cellSize.height / 2 + this.addressLabelSize.height);
+        bottomLine.points = [bottomLineStartPoint, bottomLineEndPoint];
+        bottomLine.headType = "FilledArrow";
+        return new Group([upLine, label, bottomLine]);
+    };
+    Memory.defaults = Logger.proxyInstance(Memory.instance());
+    Memory.small = Logger.proxyInstance(Memory.instance());
+    Memory.abstract = Logger.proxyInstance(Memory.instanceAbstractly());
+    Memory.horizontal = Logger.proxyInstance(Memory.instanceHorizontal());
+    Memory.blockIncrementers = Memory.buildBlockIncrementers();
+    Memory.addressLineIncrementers = Memory.buildAddressLineIncrementers();
+    Memory.addressLabelIncrementers = Memory.buildAddressLabelIncrementers();
+    return Memory;
+}());
+// 获取到当前 this 对象，代理其上属性时需要重新赋值
+// var _this = this; // 错误的方式
+//@formatter:off
+var _this = (function () { return this; })();
+//@formatter:on
 (function () {
     var library = new PlugIn.Library(new Version("0.1"));
     library["Common"] = Common;
     library["Stepper"] = Stepper;
     library["LayerSwitcher"] = LayerSwitcher;
+    library["Memory"] = Memory;
+    Logger.proxy(Common.name, _this);
     //因为不能直接在 library 上添加属性，所以将属性都定义在 dynamic 中
     library.dynamic = {
         direction: "up",
@@ -1100,15 +1629,13 @@ var PeaceTable = /** @class */ (function () {
     /**
      * 绘制抽象的虚拟内存。
      *
-     * @param [canvas] 画布
-     * @param {Point} [origin] 起点
+     * @param canvas 画布
+     * @param [origin] 起点
      * @return  虚拟内存图
      */
     library.drawMemoryAbstractly = function (canvas, origin, data) {
-        console.info("drawMemoryAbstractly");
         var locationKey = "drawMemoryAbstractly.location";
         var common = this.plugIn.library("common");
-        console.debug("app.optionKeyDown: ", app.optionKeyDown);
         if (app.optionKeyDown)
             return common.option(canvas, locationKey, null);
         (data
@@ -1118,7 +1645,6 @@ var PeaceTable = /** @class */ (function () {
             .catch(function (response) { return console.error("drawMemoryAbstractly error: ", response); });
     };
     library.drawTableColumn = function (canvas, origin) {
-        console.info("drawTableColumn");
         var locationKey = "drawTableColumn.location";
         Common.readFileContentAssociatively(canvas, locationKey)
             .then(function (response) { return JSON.parse(response.data); })
@@ -1128,12 +1654,11 @@ var PeaceTable = /** @class */ (function () {
     /**
      * 绘制抽象的虚拟内存。
      *
-     * @param [canvas] 画布
-     * @param {Point} [origin] 起点
+     * @param canvas 画布
+     * @param [origin] 起点
      * @return  虚拟内存图
      */
     library.drawMemoryStandardly = function (canvas, origin) {
-        console.info("drawMemoryStandardly");
         this.setStyle('large');
         var common = this.plugIn.library("common");
         canvas = canvas || common.canvas();
@@ -1170,30 +1695,28 @@ var PeaceTable = /** @class */ (function () {
      * 绘制虚拟内存单元，抽象地。
      *
      * @param canvas 画布
-     * @param {Point} origin 起点，矩形左下角处位置
+     * @param origin 起点，矩形左下角处位置
      * @param {String[]} descriptions 内存块描述集合
      * @return  虚拟内存单元图
      */
     library.drawMemoryBlocksAbstractly = function (canvas, origin, descriptions) {
-        var _this = this;
-        console.info("drawMemoryBlocksAbstractly。 descriptions.length=", descriptions.length);
+        var _this_1 = this;
         var pointOperator = this.dynamic.direction === "down" ? "add" : "subtract";
         return new Group(descriptions.map(function (description, index) {
             if (index > 0) {
-                origin = origin[pointOperator](new Point(0, _this.dynamic.rectSize.height));
+                origin = origin[pointOperator](new Point(0, _this_1.dynamic.rectSize.height));
             }
-            return _this.drawMemoryRect(canvas, origin, description);
+            return _this_1.drawMemoryRect(canvas, origin, description);
         }));
     };
     /**
      * 绘制栈区抽象虚拟内存。案例参考：variable.stack.json。
      *
-     * @param [canvas] 画布
-     * @param {Point} [origin] 起点
+     * @param canvas 画布
+     * @param [origin] 起点
      */
     library.drawStackMemoryAbstractly = function (canvas, origin) {
-        var _this = this;
-        console.info("drawStackMemoryAbstractly");
+        var _this_1 = this;
         this.setStyle("small");
         this.dynamic.labelTextBase = 10; //为什么栈使用 10 进制，汇编中类似 16(%rip) 的偏移地址使用了 10 进制
         this.dynamic.showSize = false;
@@ -1204,13 +1727,12 @@ var PeaceTable = /** @class */ (function () {
             .then(function (responce) {
             var data = JSON.parse(responce.data);
             var size = data.size + 8; // 从 start(=0) + step 到 size
-            _this.dynamic.labelTextLength = size.toString().length;
-            _this.dynamic.labelSize.width = 50;
-            var blocks = _this.buildBlocksForFrame(size);
-            console.info("blocks.length: ", blocks.length);
-            blocks = _this.sortBlocks(blocks);
-            _this.setBlocksForFrame(blocks, data.blocks);
-            _this.drawMemoryBlocks(canvas, origin, blocks);
+            _this_1.dynamic.labelTextLength = size.toString().length;
+            _this_1.dynamic.labelSize.width = 50;
+            var blocks = _this_1.buildBlocksForFrame(size);
+            blocks = _this_1.sortBlocks(blocks);
+            _this_1.setBlocksForFrame(blocks, data.blocks);
+            _this_1.drawMemoryBlocks(canvas, origin, blocks);
         })
             .catch(function (response) {
             console.error("readFileContentForGraphic response: ", response);
@@ -1221,15 +1743,14 @@ var PeaceTable = /** @class */ (function () {
      *
      * 汇编代码 'subq    $88, %rsp' 不一定代表栈帧空间。
      *
-     * @param {Number} size 空间，字节数
-     * @param {Number} start 起始地址，从 0 开始，和汇编代码相匹配
-     * @param {Number} step 步调，每格字节数
-     * @return {MemoryBlock[]} 内存块集合
+     * @param size 空间，字节数
+     * @param start 起始地址，从 0 开始，和汇编代码相匹配
+     * @param step 步调，每格字节数
+     * @return  内存块集合
      */
     library.buildBlocksForFrame = function (size, start, step) {
         if (start === void 0) { start = 0; }
         if (step === void 0) { step = 8; }
-        console.info("buildBlocksForFrame");
         var count = size / step;
         var blocks = [];
         for (var i = 0; i < count; i++) {
@@ -1241,17 +1762,16 @@ var PeaceTable = /** @class */ (function () {
     /**
      * 设置栈帧内存块集合。
      *
-     * @param {MemoryBlock[]} template 模板内存块集合
-     * @param {MemoryBlock[]} content 内容内存块集合
-     * @param {Number} [step] 步调，每格字节数
+     * @param  template 模板内存块集合
+     * @param  content 内容内存块集合
+     * @param [step] 步调，每格字节数
      */
     library.setBlocksForFrame = function (template, content, step) {
         if (step === void 0) { step = 8; }
-        console.info("setBlocksForFrame. total length: ".concat(template.length, ", content length: ").concat(content.length));
         var _loop_1 = function (contentBlock) {
             var index = template.findIndex(function (block) { return block.startAddress === contentBlock.startAddress; });
             if (index === -1)
-                return { value: console.error("can't found ".concat(address)) };
+                return { value: void 0 };
             var endAddress = contentBlock.startAddress + (contentBlock.size || step);
             while (template[index] && template[index].endAddress <= endAddress) {
                 template[index++].description = contentBlock.description;
@@ -1267,15 +1787,14 @@ var PeaceTable = /** @class */ (function () {
     /**
      * 基于内存映射，绘制虚拟内存。
      *
-     * @param [canvas] 画布
-     * @param {Point} [origin] 起点
+     * @param canvas 画布
+     * @param [origin] 起点
      * @param [content] 内容
      * @param [location] 内容
      * @return  虚拟内存图
      */
     library.drawMemoryForMaps = function (canvas, origin, content, location) {
-        var _this = this;
-        console.info("drawMemoryForMaps");
+        var _this_1 = this;
         this.setStyle('small');
         var common = this.plugIn.library("common");
         canvas = canvas || common.canvas();
@@ -1284,19 +1803,15 @@ var PeaceTable = /** @class */ (function () {
         return (content ? new Promise(function (resolve) { return resolve({ data: content }); }) : common.selectFile())
             // return (location ? common.readFileContent(location) : common.selectFile())
             .then(function (response) {
-            console.info("selectFile response: ", response);
-            var blocks = _this.resolveMaps(response.data);
+            var blocks = _this_1.resolveMaps(response.data);
             blocks.unshift({ startAddress: 0n, endAddress: blocks[0].startAddress }); // 从 0 开始显示
             blocks.push({
                 startAddress: blocks[blocks.length - 1].endAddress,
-                endAddress: BigInt("0xffffffffffffffff"), // 截止到 16 个 f，数值溢出，需要使用 BigInt
+                endAddress: bigint("0xffffffffffffffff"), // 截止到 16 个 f，数值溢出，需要使用 bigint
             });
-            console.info("original blocks.length: ", blocks.length);
-            blocks = _this.paddingBlocks(_this.sortBlocks(blocks));
-            console.info("padding blocks.length: ", blocks.length);
-            blocks = _this.mergeBlocks(blocks);
-            console.info("merged blocks.length: ", blocks.length);
-            return _this.drawMemoryBlocks(canvas, origin, blocks);
+            blocks = _this_1.paddingBlocks(_this_1.sortBlocks(blocks));
+            blocks = _this_1.mergeBlocks(blocks);
+            return _this_1.drawMemoryBlocks(canvas, origin, blocks);
         })
             .catch(function (response) {
             console.error("selectFile response: ", response);
@@ -1306,23 +1821,22 @@ var PeaceTable = /** @class */ (function () {
      * 解析内存映射。
      *
      * @param content 内存映射内容
-     * @return {MemoryBlock[]} 内存块
+     * @return  内存块
      */
     library.resolveMaps = function (content) {
         //1                                  2     3         4      5        6
         //561d970c5000-561d970c6000          r--p  00000000  08:03  1581273  /usr/lib/jvm/java-17-openjdk-amd64/bin/java
-        console.info("resolveMaps");
         var lines = content.split("\n");
-        console.info("lines.length: ", lines.length);
         return lines.filter(function (line) { return line; })
             .map(function (line) { return line.split(/ +/); })
             .map(function (cells) {
-            // console.info("cells: ", cells);
             var addresses = cells[0].split("-");
-            // 16 个 f 需要使用 BigInt 才能表示
+            // 16 个 f 需要使用 bigint 才能表示
             return {
-                startAddress: BigInt(parseInt(addresses.shift(), 16)),
-                endAddress: BigInt(parseInt(addresses.shift(), 16)),
+                // startAddress: parseInt(addresses.shift(), 16),
+                startAddress: bigint(parseInt(addresses.shift(), 16)),
+                // endAddress: parseInt(addresses.shift(), 16),
+                endAddress: bigint(parseInt(addresses.shift(), 16)),
                 description: (cells[5] || "").split("/").pop() || "[anon]" //全路径太长，只取末尾的程序名
             };
         });
@@ -1330,8 +1844,8 @@ var PeaceTable = /** @class */ (function () {
     /**
      * 合并相同描述的相邻内存块。此处假设相同描述的内存块是连续的。
      *
-     * @param {MemoryBlock[]} blocks 内存块集合
-     * @return {MemoryBlock[]} 内存块集合
+     * @param  blocks 内存块集合
+     * @return  内存块集合
      */
     library.mergeBlocks = function (blocks) {
         for (var i = 1; i < blocks.length; i++) {
@@ -1346,8 +1860,8 @@ var PeaceTable = /** @class */ (function () {
     };
     /**
      * 排序内存块集合。
-     * @param {MemoryBlock[]} blocks 内存块集合
-     * @return {MemoryBlock[]} 等于输入的内存块集合
+     * @param  blocks 内存块集合
+     * @return  等于输入的内存块集合
      */
     library.sortBlocks = function (blocks) {
         blocks.sort(function (left, right) { return left.startAddress - right.startAddress; });
@@ -1356,8 +1870,8 @@ var PeaceTable = /** @class */ (function () {
     /**
      * 对齐内存块集合。
      * 内存地址应该是连续的，在空缺处补齐。
-     * @param {MemoryBlock[]} blocks 内存块集合
-     * @return {MemoryBlock[]} 等于输入的内存块集合
+     * @param  blocks 内存块集合
+     * @return  等于输入的内存块集合
      */
     library.paddingBlocks = function (blocks) {
         for (var i = 1; i < blocks.length; i++) {
@@ -1374,26 +1888,25 @@ var PeaceTable = /** @class */ (function () {
      * 绘制虚拟内存单元，从下往上绘制。
      *
      * @param canvas 画布
-     * @param {Point} origin 起点，矩形的左下点
-     * @param {MemoryBlock[]} blocks 内存块集合
+     * @param origin 起点，矩形的左下点
+     * @param  blocks 内存块集合
      * @return  绘制的图形
      */
     library.drawMemoryBlocks = function (canvas, origin, blocks) {
-        var _this = this;
-        console.info("drawMemoryBlocks");
+        var _this_1 = this;
         var array = blocks.map(function (block, index) {
-            // console.info("block: ", JSON.stringify(block));
+            // PeaceConsole.root.info(`block: ${JSON.stringify(block)}`);
             if (index === 0)
-                return _this.drawMemoryBlock(canvas, origin, block);
-            origin = origin.subtract(new Point(0, _this.dynamic.rectSize.height));
+                return _this_1.drawMemoryBlock(canvas, origin, block);
+            origin = origin.subtract(new Point(0, _this_1.dynamic.rectSize.height));
             var prev = blocks[index - 1], curr = blocks[index];
             if (prev.endAddress < curr.startAddress) {
-                origin = origin.subtract(new Point(0, _this.dynamic.rectSize.height));
+                origin = origin.subtract(new Point(0, _this_1.dynamic.rectSize.height));
             }
             else if (prev.endAddress > curr.startAddress) {
-                origin = origin.add(new Point(0, _this.dynamic.rectSize.height / 2));
+                origin = origin.add(new Point(0, _this_1.dynamic.rectSize.height / 2));
             }
-            return _this.drawMemoryBlock(canvas, origin, block);
+            return _this_1.drawMemoryBlock(canvas, origin, block);
         });
         return new Group(array);
     };
@@ -1401,12 +1914,12 @@ var PeaceTable = /** @class */ (function () {
      * 绘制虚拟内存单元，从下往上绘制。
      *
      * @param canvas 画布
-     * @param {Point} startPoint 起点，矩形左下角处位置
-     * @param {MemoryBlock} block 内存块
+     * @param startPoint 起点，矩形左下角处位置
+     * @param block 内存块
      * @return  绘制的图形
      */
     library.drawMemoryBlock = function (canvas, startPoint, block) {
-        // console.info(`drawMemoryBlock. startPoint=${startPoint}, block=${block}`);
+        // PeaceConsole.root.info(`drawMemoryBlock. startPoint=${startPoint}, block=${block}`);
         var dynamic = this.dynamic;
         var endPoint = new Point(startPoint.x, startPoint.y - dynamic.rectSize.height);
         var graphics = [
@@ -1427,7 +1940,7 @@ var PeaceTable = /** @class */ (function () {
      * 绘制内存矩形。
      *
      * @param canvas 画布
-     * @param {Point} location 位置
+     * @param location 位置
      * @param [description] 描述
      * @return {Shape} 绘制的图形
      */
@@ -1448,9 +1961,9 @@ var PeaceTable = /** @class */ (function () {
      * 绘制虚拟内存单元地址。
      *
      * @param canvas 画布
-     * @param {Point} origin 起点
-     * @param {Number|BigInt} address 地址
-     * @return {Group} 绘制的图形
+     * @param origin 起点
+     * @param {Number|bigint} address 地址
+     * @return 绘制的图形
      */
     library.drawMemoryAddress = function (canvas, origin, address) {
         var line = canvas.newLine();
@@ -1471,13 +1984,12 @@ var PeaceTable = /** @class */ (function () {
     /**
      * 格式化内存地址。
      *
-     * PlugIn.find('com.github.peacetrue.learn.graffle').library('memory').formatMemoryAddress(BigInt("0xffffffffffffffff"))
+     * PlugIn.find('com.github.peacetrue.learn.graffle').library('memory').formatMemoryAddress(bigint("0xffffffffffffffff"))
      *
-     * @param {Number|BigInt} address 内存地址
+     * @param {Number|bigint} address 内存地址
      * @return  内存地址描述
      */
     library.formatMemoryAddress = function (address) {
-        // console.info(`formatMemoryAddress. address=${address}`);
         var dynamic = this.dynamic;
         var text = address < 0 ? '-' : ' '; //符号位
         if (dynamic.labelTextBase === 16)
@@ -1489,9 +2001,9 @@ var PeaceTable = /** @class */ (function () {
      * 绘制内存空间尺寸。
      *
      * @param canvas 画布
-     * @param {Point} location 位置
-     * @param {Number} size 空间尺寸
-     * @return {Group} 绘制的图形
+     * @param location 位置
+     * @param size 空间尺寸
+     * @return 绘制的图形
      */
     library.drawMemorySize = function (canvas, location, size) {
         var dynamic = this.dynamic;

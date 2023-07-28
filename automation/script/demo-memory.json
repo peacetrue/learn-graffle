@@ -1,0 +1,86 @@
+[
+  {
+    "startAddress": 93824992231424,
+    "endAddress": 93824992251904,
+    "description": "heap.bin"
+  },
+  {
+    "startAddress": 93824992251904,
+    "endAddress": 93824992387072,
+    "description": "[heap]"
+  },
+  {
+    "startAddress": 93824992387072,
+    "endAddress": 140737349943296
+  },
+  {
+    "startAddress": 140737349943296,
+    "endAddress": 140737352151040,
+    "description": "libc.so.6"
+  },
+  {
+    "startAddress": 140737352151040,
+    "endAddress": 140737352204288,
+    "description": "[anon]"
+  },
+  {
+    "startAddress": 140737352204288,
+    "endAddress": 140737353506816
+  },
+  {
+    "startAddress": 140737353506816,
+    "endAddress": 140737353789440,
+    "description": "[anon]"
+  },
+  {
+    "startAddress": 140737353789440,
+    "endAddress": 140737353854976
+  },
+  {
+    "startAddress": 140737353854976,
+    "endAddress": 140737353863168,
+    "description": "[anon]"
+  },
+  {
+    "startAddress": 140737353863168,
+    "endAddress": 140737353879552,
+    "description": "[vvar]"
+  },
+  {
+    "startAddress": 140737353879552,
+    "endAddress": 140737353887744,
+    "description": "[vdso]"
+  },
+  {
+    "startAddress": 140737353887744,
+    "endAddress": 140737354113024,
+    "description": "ld-linux-x86-64.so.2"
+  },
+  {
+    "startAddress": 140737354113024,
+    "endAddress": 140737354117120
+  },
+  {
+    "startAddress": 140737354117120,
+    "endAddress": 140737354133504,
+    "description": "ld-linux-x86-64.so.2"
+  },
+  {
+    "startAddress": 140737354133504,
+    "endAddress": 140737488216064
+  },
+  {
+    "startAddress": 140737488216064,
+    "endAddress": 140737488351232,
+    "description": "[stack]"
+  },
+  {
+    "startAddress": 140737488351232,
+    "endAddress": 18446744073699066000
+  },
+  {
+    "startAddress": 18446744073699066000,
+    "endAddress": 18446744073699070000,
+    "description": "[vsyscall]"
+  }
+]

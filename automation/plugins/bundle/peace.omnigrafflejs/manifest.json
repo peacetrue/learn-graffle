@@ -22,6 +22,10 @@
     },
     {
       "image": "icon.png",
+      "identifier": "memory_draw"
+    },
+    {
+      "image": "icon.png",
       "identifier": "memory_draw_abstractly"
     },
     {
@@ -58,9 +62,6 @@
     }
   ],
   "libraries": [
-    {
-      "identifier": "library"
-    },
     {
       "identifier": "common"
     },

@@ -67,7 +67,12 @@ plugin-perform.case: automation/plugin-perform;
 
 # 本地测试案例
 demo-memory.case:
+	cd plugins/bundle/peace.omnigrafflejs/Resources && tsc || true
 	make automation script_content=demo-memory.js script_argument=demo-memory.maps
+
+memory.abstract.case:
+	cd plugins/bundle/peace.omnigrafflejs/Resources && tsc || true
+	make automation script_content=demo-memory.js script_argument=demo-memory.json
 
 # 外部使用案例，可通过 script_argument 指定 maps 文件绝对路径
 demo-memory.call.case: $(BUILD)

@@ -1,7 +1,7 @@
 (() => {
 
     let library = new PlugIn.Library(new Version("0.1"));
-    library.plugIn.resourceNamed("libs/logger.js").fetch(response => eval(response.toString()));
+    // library.plugIn.resourceNamed("libs/logger.js").fetch(response => eval(response.toString()));
     // 反例：其他类库未完成初始化时，不能获取当前类库
     // 正例：library.plugIn.resourceNamed("logger.js").fetch(response => eval(response.toString()));
     // eval 时需要注意绑定的对象

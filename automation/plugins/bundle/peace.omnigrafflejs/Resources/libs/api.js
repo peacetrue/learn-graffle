@@ -28,20 +28,3 @@ Number.formatMemorySize = function (sizeInBytes) {
 }
 
 
-/**
- * 内存块。
- */
-class MemoryBlock {
-    /**
-     * 使用全部参数构造内存块。
-     *
-     * @param {Number} startAddress 起始地址
-     * @param {Number} endAddress 结束地址
-     * @param {String} [description] 描述
-     */
-    constructor(startAddress, endAddress, description) {
-        this.startAddress = startAddress;
-        this.endAddress = endAddress;
-        this.description = description;
-    }
-}
