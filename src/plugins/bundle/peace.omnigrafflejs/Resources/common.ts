@@ -19,6 +19,8 @@ class Logger {
     [Logger.CATEGORY_ROOT]: LoggerLevel.DEBUG,
     "Common": LoggerLevel.DEBUG,
     "MemoryPainter.incrementOrigin": LoggerLevel.WARN,
+    "MemoryPainter.subtract": LoggerLevel.WARN,
+    "MemoryPainter.getDirectionHandler": LoggerLevel.WARN,
   };
   /** 日志缓存，category 为 key */
   public static loggers: Record<string, Logger> = {};
@@ -71,14 +73,13 @@ class Logger {
   /** 记录日志信息 */
   public log(level: LoggerLevel, args: any[]) {
     Logger.log(`Logger.log: level=${level}, args=${args}`);
-    if (this.isLevelEnabled(level)) {
-      let levelName = LoggerLevel[level];
-      let formattedLevelName = Logger.leftPad(levelName, 5, ' ');
-      let indent = "  ".repeat(Logger.functionHierarchy);
-      levelName = levelName.toLowerCase();
-      Logger.log(`Logger.log: levelName=${levelName}, levelName in console=`, levelName in console);
-      console[levelName in console ? levelName : "info"](`[${formattedLevelName}]`, indent, ...args);
-    }
+    if (!this.isLevelEnabled(level)) return;
+    let levelName = LoggerLevel[level];
+    let formattedLevelName = Logger.leftPad(levelName, 5, ' ');
+    let indent = "  ".repeat(Logger.functionHierarchy);
+    levelName = levelName.toLowerCase();
+    Logger.log(`Logger.log: levelName=${levelName}, levelName in console=`, levelName in console);
+    console[levelName in console ? levelName : "info"](`[${formattedLevelName}]`, indent, ...args);
   }
 
   static leftPad(src: string, length: number, paddingChar = ' ') {
@@ -112,18 +113,25 @@ class Logger {
   public static proxyInstance<T extends object>(instance: T) {
     return new Proxy(instance, {
       get(target, name, receiver) {
-        if (target.hasOwnProperty(name)) {
-          return Reflect.get(target, name, receiver);
-        }
-
         let value = target[name];
-        if (typeof value === "function") {
+        // 排除继承的方法，例如：Object 上的
+        if (!(name in Object.prototype) && typeof value === "function") {
           return Logger.buildFunctionProxy(value, instance.constructor.name, name.toString());
         }
-
+        // if (Logger.isCustomType(value)) return Logger.proxyInstance(value);
         return value;
       },
     });
+  }
+
+  private static isCustomType(value: any): boolean {
+    return value != null && value.constructor && !Logger.isSimpleType(value);
+  }
+
+  private static isSimpleType(value: any): boolean {
+    return [Object, Number, Boolean, String, Array]
+      .map(item => item.name)
+      .includes(value.constructor.name);
   }
 
   /**
@@ -324,13 +332,14 @@ class Common {
   public static readFileContentSelectively(object: Solid | Canvas, locationKey: string, content?: string) {
     return (
       content
-        ? Common.promise({data: content})
+        ? Common.promise({url: null as URL, data: content})
         : Common.readFileContentAssociatively(object, locationKey)
     )
-      .then(response => {
-        Logger.getLogger().debug("response.data: \n", response.data);
-        return {...response, data: JSON.parse(response.data)};
-      });
+      // .then(response => {
+      //   Logger.getLogger().debug("response.data: \n", response.data);
+      //   return {...response, data: JSON.parse(response.data)};
+      // })
+      ;
   }
 
   /**
@@ -649,14 +658,13 @@ class Common {
     });
   }
 
+  public static plugIn: PlugIn;
   // library.plugIn.resourceNamed("libs/logger.js").fetch(response => eval(response.toString()));
   // 反例：其他类库未完成初始化时，不能获取当前类库
   // 正例：library.plugIn.resourceNamed("logger.js").fetch(response => eval(response.toString()));
   // eval 时需要注意绑定的对象
   public static loadClass(name, path = `libs/${name}.js`) {
-
     if (name in Object) {
-
       return new Promise((resolve, reject) => resolve(Object[name]))
     }
     return this.promiseUrlFetch(this.plugIn.resourceNamed(path))
@@ -748,6 +756,29 @@ class Common {
 
   }
 
+}
+
+/**
+ * 枚举，key 为名称，value 为索引
+ * 示例：{0: "BOTTOM_UP", 1: "LEFT_RIGHT", 2: "RIGHT_LEFT", BOTTOM_UP: 0, LEFT_RIGHT: 1, RIGHT_LEFT: 2}
+ */
+class Enum {
+  public static view(enums: Record<string | number, number | string>) {
+    let keys = Object.keys(enums);
+    console.info("keys: ", keys);
+    let values = Object.values(enums);
+    console.info("values: ", values);
+  }
+
+  public static keys(enums: Record<string | number, number | string>) {
+    let keys = Object.keys(enums);
+    return keys.slice(keys.length / 2);
+  }
+
+  public static values(enums: Record<string | number, number | string>) {
+    let keys = Object.values(enums);
+    return keys.slice(keys.length / 2) as number[];
+  }
 }
 
 
@@ -1170,12 +1201,16 @@ class LayerSwitcher {
 
 class PeaceTable {
 
-  public static defaults: PeaceTable = Logger.proxyInstance(PeaceTable.instance(
+  public static defaults: PeaceTable = PeaceTable.instance(
     new Size(200, 70), 12, Color.RGB(1.0, 1.0, 0.75, null)
-  ));
-  public static small: PeaceTable = Logger.proxyInstance(PeaceTable.instance(
+  );
+  public static small: PeaceTable = PeaceTable.instance(
     new Size(200, 20), 12, Color.RGB(1.0, 1.0, 0.75, null)
-  ));
+  );
+  /** 倾向于水平绘图，宽度调小 */
+  public static horizontal: PeaceTable = PeaceTable.instance(
+    new Size(150, 20), 12, Color.RGB(1.0, 1.0, 0.75, null)
+  );
 
   public static cellFillColors: Record<string, Color> = {
     "[anon]": Color.RGB(0.75, 1.0, 0.75, null),// 浅绿，已占用但不知道具体用途
@@ -1191,7 +1226,7 @@ class PeaceTable {
     table.cellSize = cellSize;
     table.cellTextSize = cellTextSize;
     table.cellFillColor = cellFillColor;
-    return table;
+    return Logger.proxyInstance(table);
   }
 
   /**
@@ -1327,6 +1362,16 @@ class Memory {
     }
     return this.instance(data["title"], MemoryBlock.parse(data["blocks"]))
   }
+
+  public static parseMaps(content: string): Memory {
+    return this.instance(null, MemoryBlock.parseMaps(content));
+  }
+
+  public toString() {
+    return JSON.stringify(this);
+  }
+
+
 }
 
 /** 内存块 */
@@ -1342,6 +1387,12 @@ class MemoryBlock {
     this.description = description;
   }
 
+  /** 实例化 */
+  public static instance(object: Partial<Record<keyof MemoryBlock, any>>): MemoryBlock {
+    return Object.assign(new MemoryBlock(undefined, undefined, undefined), object);
+  }
+
+
   public size() {
     return MemoryBlock.subtract(this.endAddress, this.startAddress);
   }
@@ -1350,6 +1401,7 @@ class MemoryBlock {
     return `'${this.description}':${this.startAddress}~${this.endAddress}`;
   }
 
+  /** 获取最大的地址长度，需要将所有地址格式化成统一长度 */
   public static getMaxAddressLength(blocks: MemoryBlock[], base: number = 10) {
     return Math.max(...blocks.map(block => block.endAddress == null ? 0 : block.endAddress.toString(base).length));
   }
@@ -1359,18 +1411,8 @@ class MemoryBlock {
   }
 
   /** 将记录转换为内存块对象 */
-  public static parse(object: Record<string, any>[]): MemoryBlock[] {
-    return object.map(item => this.wrap(item));
-  }
-
-  /** 将记录转换为内存块对象 */
-  public static wrap(object: Record<string, any>): MemoryBlock {
-    return object instanceof MemoryBlock ? object
-      : new MemoryBlock(
-        parseInt(object['startAddress']),
-        parseInt(object['endAddress']),
-        object['description'],
-      )
+  public static parse(object: Partial<Record<keyof MemoryBlock, any>>[]): MemoryBlock[] {
+    return object.map(item => this.instance(item));
   }
 
   /** 按内存地址升序排列 */
@@ -1424,77 +1466,251 @@ class MemoryBlock {
     }
   }
 
-}
-
-/** 内存绘制方向 */
-enum MemoryDirection {
-  BOTTOM_UP,//从下往上，虚拟地址空间图
-  LEFT_RIGHT,//从左往右，每个地址都对应一个字节，字节内部各标志位使用情况；eflags 寄存器各标志位使用情况
-}
-
-/** 内存绘制方向影响相关图形起点的递增方式 */
-type MemoryOriginIncrementer = (origin: Point, memory: MemoryPainter) => Point;
-
-abstract class MemoryOriginHandler {
-  protected memoryPainter: MemoryPainter;
-
-  constructor(memoryPainter: MemoryPainter) {
-    this.memoryPainter = memoryPainter;
+  /** 解析内存映射，升序排列。linux 下 /proc/<pid>/maps 内容 */
+  public static parseMaps(content: string): MemoryBlock[] {
+    //1                                  2     3         4      5        6
+    //561d970c5000-561d970c6000          r--p  00000000  08:03  1581273  /usr/lib/jvm/java-17-openjdk-amd64/bin/java
+    let lines = content.split("\n");
+    let blocks = lines
+      .filter(line => line.trim())   // 删除空行
+      .map(line => line.split(/ +/)) // 按空格分割
+      .map(cells => {
+        let addresses = cells[0].split("-");
+        // 16 个 f 需要使用 bigint 才能表示
+        return new MemoryBlock(
+          BigInt(parseInt(addresses[0], 16)),
+          BigInt(parseInt(addresses[1], 16)),
+          (cells[5] || "").split("/").pop() || "[anon]",//全路径太长，只取末尾的程序名
+        )
+      });
+    // 填充顶部
+    blocks.unshift(new MemoryBlock(BigInt(0), blocks[0].startAddress));// 从 0 开始显示
+    // 填充尾部
+    blocks.push(new MemoryBlock(
+      blocks[blocks.length - 1].endAddress,// bigint 和 bigint 才能相减求 size
+      BigInt("0xffffffffffffffff"),// 截止到 16 个 f，数值溢出，需要使用 bigint
+    ));
+    this.merge(blocks);
+    return blocks;
   }
 
-  abstract getNextBlockOrigin(origin: Point): Point;
+}
 
-  getAddressLineOrigin(origin: Point): Point {
+/**
+ * 绘图方向始终是从上向下，
+ * 内存块集合传入时约定为升序排列（无序会自动排序），
+ * 通过控制内存块集合的排序（升序/降序），可以控制内存的显示方向
+ */
+enum MemoryDirection {
+  LEFT_RIGHT,//从左往右
+  RIGHT_LEFT,//从右往左，每个地址都对应一个字节，字节内部各标志位使用情况；eflags 寄存器各标志位使用情况
+  UP_BOTTOM,//从上往下
+  BOTTOM_UP,//从下往上，虚拟地址空间图
+}
+
+/** 内存绘制方向影响相关图形起点的处理方式 */
+interface MemoryDirectionHandler {
+  order(blocks: MemoryBlock[]): void;
+
+  getNextBlockOrigin(painter: MemoryPainter, origin: Point): Point;
+
+  getAddressLineOrigin(painter: MemoryPainter, origin: Point): Point;
+
+  getAddressLineEndpoint(painter: MemoryPainter, origin: Point): Point;
+
+  getAddressLabelOrigin(painter: MemoryPainter, origin: Point): Point;
+
+  getAddressStartValue(painter: MemoryPainter, block: MemoryBlock): number | bigint;
+
+  getAddressEndValue(painter: MemoryPainter, block: MemoryBlock): number | bigint;
+}
+
+class MemoryDirectionHandlerAdapter implements MemoryDirectionHandler {
+
+  order(blocks: MemoryBlock[]): void {
+  }
+
+  getNextBlockOrigin(painter: MemoryPainter, origin: Point): Point {
     return origin;
   }
 
-  abstract getAddressLineEndpoint(origin: Point): Point;
+  getAddressLineOrigin(painter: MemoryPainter, origin: Point): Point {
+    return origin;
+  }
 
-  abstract getAddressLabelOrigin(origin: Point): Point;
+  getAddressLineEndpoint(painter: MemoryPainter, origin: Point): Point {
+    return origin;
+  }
+
+  getAddressLabelOrigin(painter: MemoryPainter, origin: Point): Point {
+    return origin;
+  }
+
+  getAddressStartValue(painter: MemoryPainter, block: MemoryBlock): number | bigint {
+    throw new Error("The method must be overwrite!");
+  }
+
+  getAddressEndValue(painter: MemoryPainter, block: MemoryBlock): number | bigint {
+    throw new Error("The method must be overwrite!");
+  }
+
 }
 
-class BottomUpHandler extends MemoryOriginHandler {
-  getNextBlockOrigin(origin: Point): Point {
-    return origin.add(new Point(0, this.memoryPainter.table.cellSize.height));
+/** 顺序 */
+class MemoryOrderHandler extends MemoryDirectionHandlerAdapter {
+
+  public static defaults: MemoryOrderHandler = new MemoryOrderHandler();
+
+  /** 排序内存块集合 */
+  order(blocks: MemoryBlock[]): void {
+    MemoryBlock.ascend(blocks);
+    MemoryBlock.padding(blocks, true);
   }
 
-
-  getAddressLineEndpoint(origin: Point): Point {
-    return origin.subtract(new Point(this.memoryPainter.addressLineLength, 0));
+  getAddressStartValue(painter: MemoryPainter, block: MemoryBlock): number | bigint {
+    return block.startAddress;
   }
 
-  getAddressLabelOrigin(origin: Point): Point {
-    return origin.subtract(new Point(this.memoryPainter.addressLabelTextLength / 2 * 8, 0));
+  getAddressEndValue(painter: MemoryPainter, block: MemoryBlock): number | bigint {
+    return block.endAddress;
   }
+
 }
 
-class LeftRightHandler extends MemoryOriginHandler {
-  getNextBlockOrigin(origin: Point): Point {
-    return origin.add(new Point(this.memoryPainter.table.cellSize.width, 0));
+/** 逆序 */
+class MemoryReverseHandler extends MemoryDirectionHandlerAdapter {
+  public static defaults: MemoryOrderHandler = new MemoryReverseHandler();
+
+  /** 排序内存块集合 */
+  order(blocks: MemoryBlock[]): void {
+    MemoryBlock.descend(blocks);
+    MemoryBlock.padding(blocks, false);
   }
 
-  getAddressLineOrigin(origin: Point): Point {
-    return origin.add(new Point(0, this.memoryPainter.table.cellSize.height));
+  getAddressStartValue(painter: MemoryPainter, block: MemoryBlock): number | bigint {
+    return block.endAddress;
   }
 
-  getAddressLineEndpoint(origin: Point): Point {
-    return origin.add(new Point(0, this.memoryPainter.addressLineLength));
+  getAddressEndValue(painter: MemoryPainter, block: MemoryBlock): number | bigint {
+    return block.startAddress;
   }
 
-  getAddressLabelOrigin(origin: Point): Point {
+}
+
+class MemoryHorizontalHandler extends MemoryDirectionHandlerAdapter {
+
+  public static defaults: MemoryHorizontalHandler = new MemoryHorizontalHandler();
+
+  getNextBlockOrigin(painter: MemoryPainter, origin: Point): Point {
+    return origin.add(new Point(painter.table.cellSize.width, 0));
+  }
+
+  getAddressLineOrigin(painter: MemoryPainter, origin: Point): Point {
+    return origin.add(new Point(0, painter.table.cellSize.height));
+  }
+
+  getAddressLineEndpoint(painter: MemoryPainter, origin: Point): Point {
+    return origin.add(new Point(0, painter.addressLineLength));
+  }
+
+  getAddressLabelOrigin(painter: MemoryPainter, origin: Point): Point {
     return origin.add(new Point(0, 12 / 2));
   }
 }
 
+class MemoryVerticalHandler extends MemoryDirectionHandlerAdapter {
+
+  public static defaults: MemoryVerticalHandler = new MemoryVerticalHandler();
+
+  getNextBlockOrigin(painter: MemoryPainter, origin: Point): Point {
+    return origin.add(new Point(0, painter.table.cellSize.height));
+  }
+
+  getAddressLineEndpoint(painter: MemoryPainter, origin: Point): Point {
+    return origin.subtract(new Point(painter.addressLineLength, 0));
+  }
+
+  getAddressLabelOrigin(painter: MemoryPainter, origin: Point): Point {
+    return origin.subtract(new Point(painter.addressLabelTextLength / 2 * 8, 0));
+  }
+}
+
+class AbstractMemoryDirectionHandler implements MemoryDirectionHandler {
+
+  private orderHandler: MemoryDirectionHandler;
+  private directionHandler: MemoryDirectionHandler;
+
+  constructor(orderHandler: MemoryDirectionHandler, directionHandler: MemoryDirectionHandler) {
+    this.orderHandler = orderHandler;
+    this.directionHandler = directionHandler;
+  }
+
+  order(blocks: MemoryBlock[]) {
+    this.orderHandler.order(blocks);
+  }
+
+  getAddressLabelOrigin(painter: MemoryPainter, origin: Point): Point {
+    return this.directionHandler.getAddressLabelOrigin(painter, origin);
+  }
+
+  getAddressLineEndpoint(painter: MemoryPainter, origin: Point): Point {
+    return this.directionHandler.getAddressLineEndpoint(painter, origin);
+  }
+
+  getAddressLineOrigin(painter: MemoryPainter, origin: Point): Point {
+    return this.directionHandler.getAddressLineOrigin(painter, origin);
+  }
+
+  getNextBlockOrigin(painter: MemoryPainter, origin: Point): Point {
+    return this.directionHandler.getNextBlockOrigin(painter, origin);
+  }
+
+  getAddressStartValue(painter: MemoryPainter, block: MemoryBlock): number | bigint {
+    return this.orderHandler.getAddressStartValue(painter, block);
+  }
+
+  getAddressEndValue(painter: MemoryPainter, block: MemoryBlock): number | bigint {
+    return this.orderHandler.getAddressEndValue(painter, block);
+  }
+
+}
+
+class LeftRightHandler extends AbstractMemoryDirectionHandler {
+  constructor() {
+    super(MemoryOrderHandler.defaults, MemoryHorizontalHandler.defaults);
+  }
+}
+
+class RightLeftHandler extends AbstractMemoryDirectionHandler {
+  constructor() {
+    super(MemoryReverseHandler.defaults, MemoryHorizontalHandler.defaults);
+  }
+}
+
+class UpBottomHandler extends AbstractMemoryDirectionHandler {
+  constructor() {
+    super(MemoryOrderHandler.defaults, MemoryVerticalHandler.defaults);
+  }
+}
+
+class BottomUpHandler extends AbstractMemoryDirectionHandler {
+  constructor() {
+    super(MemoryReverseHandler.defaults, MemoryVerticalHandler.defaults);
+  }
+}
+
+
 /** 内存画师 */
 class MemoryPainter {
 
-  public static vertical: MemoryPainter = Logger.proxyInstance(MemoryPainter.instanceVertical());
-  public static horizontal: MemoryPainter = Logger.proxyInstance(MemoryPainter.instanceHorizontal());
+  public static LEFT_RIGHT: MemoryPainter = MemoryPainter.instanceHorizontal({direction: MemoryDirection.LEFT_RIGHT});
+  public static RIGHT_LEFT: MemoryPainter = MemoryPainter.instanceHorizontal({direction: MemoryDirection.RIGHT_LEFT});
+  public static UP_BOTTOM: MemoryPainter = MemoryPainter.instance({direction: MemoryDirection.UP_BOTTOM});
+  public static BOTTOM_UP: MemoryPainter = MemoryPainter.instance({direction: MemoryDirection.BOTTOM_UP});
+  public static directionHandlers = MemoryPainter.buildDirectionHandlers();
 
   public table: PeaceTable = PeaceTable.small;
   public direction: MemoryDirection = MemoryDirection.BOTTOM_UP; //绘制方向
-  public originHandler: MemoryOriginHandler; //绘制方向
   public showAddress: boolean = true;   // 是否显示地址
   public addressLineLength: number = 50;
   public addressLabelSize: Size = new Size(150, 20);
@@ -1503,26 +1719,51 @@ class MemoryPainter {
   public showSize: boolean = true;      // 是否显示占用空间
   public sizeStyle: string = "inner";   // 占用空间显示样式：outer、inner
 
-  public static instanceVertical() {
-    let painter = new MemoryPainter();
-    painter.direction = MemoryDirection.BOTTOM_UP;
-    painter.originHandler = Logger.proxyInstance(new BottomUpHandler(painter));
-    return painter;
+  public static _instance(painter: MemoryPainter, options: Partial<Record<keyof MemoryPainter, any>>) {
+    Object.assign(painter, options);
+    return Logger.proxyInstance(painter);
   }
 
-  public static instanceHorizontal() {
+  public static instance(options: Partial<Record<keyof MemoryPainter, any>>) {
+    return this._instance(new MemoryPainter(), options);
+  }
+
+  public static instanceHorizontal(options: Partial<Record<keyof MemoryPainter, any>>) {
     let painter = new MemoryPainter();
-    painter.direction = MemoryDirection.LEFT_RIGHT;
-    painter.originHandler = Logger.proxyInstance(new LeftRightHandler(painter));
+    painter.table = PeaceTable.horizontal;
     painter.addressLineLength = 25;
     painter.addressLabelTextBase = 10;
     painter.showSize = false;
-    return painter;
+    return this._instance(painter, options);
   }
 
+  public static buildDirectionHandlers() {
+    let directionHandlers: Record<MemoryDirection, MemoryDirectionHandler> = {
+      [MemoryDirection.LEFT_RIGHT]: new LeftRightHandler(),
+      [MemoryDirection.RIGHT_LEFT]: new RightLeftHandler(),
+      [MemoryDirection.UP_BOTTOM]: new UpBottomHandler(),
+      [MemoryDirection.BOTTOM_UP]: new BottomUpHandler(),
+    }
+    Object.keys(directionHandlers).forEach((value, index) => {
+      directionHandlers[value] = Logger.proxyInstance(directionHandlers[value]);
+    })
+    return directionHandlers;
+  }
+
+  public getDirectionHandler(): MemoryDirectionHandler {
+    return MemoryPainter.directionHandlers[this.direction];
+  }
+
+
+  /** 缓存每个 canvas 使用的 MemoryPainter */
   public static canvasCache: Record<string, MemoryPainter> = {};
+  /** 绘制模式-键 */
   public static modeKey: string = "mode";
-  public static modeValue: string = "vertical";
+  /** 绘制模式-默认值*/
+  public static modeValue: number = MemoryDirection.BOTTOM_UP;
+
+  public static drawMemoryLocationKey = "drawMemoryLocation";
+
 
   /**
    * 绘制地址空间布局。
@@ -1538,95 +1779,46 @@ class MemoryPainter {
     // shift 强制重新配置
     if (app.shiftKeyDown || !memory) {
       let form = new Form();
-      form.addField(new Form.Field.Option(this.modeKey, "绘制模式", ["vertical", "horizontal"], ["垂直", "水平"], this.modeValue, null), 0);
+      form.addField(new Form.Field.Option(this.modeKey, "绘制模式", Enum.values(MemoryDirection), Enum.keys(MemoryDirection), this.modeValue, null), 0);
       return form.show("配置地址空间绘制参数", "确定")
-        .then(response => MemoryPainter.canvasCache[canvasName] = MemoryPainter[response.values[this.modeKey]])
-        .then(response => MemoryPainter.canvasCache[canvasName].drawMemorySelectively(canvas, origin))
+        .then(response => {
+          // Logger.getLogger().debug("form: ", response.values); // error
+          Logger.getLogger().debug("modeKey: ", response.values[this.modeKey]);
+          Logger.getLogger().debug("MemoryDirection: ", MemoryDirection[response.values[this.modeKey]]);
+          memory = MemoryPainter[MemoryDirection[response.values[this.modeKey]]];
+          Logger.getLogger().debug("direction: ", memory.direction);
+          MemoryPainter.canvasCache[canvasName] = memory;
+          memory.drawMemoryInteractively(canvas, origin);
+        })
         .catch(response => Logger.getLogger().error("error:", response));
     }
+    // option 重新选择文件
     if (app.optionKeyDown) Common.option(canvas, MemoryPainter.drawMemoryLocationKey, null);
-    memory.drawMemorySelectively(canvas, origin);
+    return memory.drawMemoryInteractively(canvas, origin);
   }
 
   /**
-   * 基于内存映射，绘制虚拟内存。
-   *
-   * @param canvas 画布
-   * @param origin 起点
-   * @param [content] 内容
-   * @return  虚拟内存图
-   */
-  public drawMemoryForMaps(canvas: Canvas, origin: Point, content?: string) {
-    // readFileContentForGraphic(canvas, "maps-location")
-    return (content ? Common.promise({data: content}) : Common.selectFile())
-      // return (location ? common.readFileContent(location) : common.selectFile())
-      .then(response => {
-
-        let blocks = MemoryPainter.resolveMaps(response.data);
-        blocks.unshift(new MemoryBlock(BigInt(0), blocks[0].startAddress));// 从 0 开始显示
-        blocks.push(new MemoryBlock(
-          blocks[blocks.length - 1].endAddress,// bigint 和 bigint 才能相减求 size
-          BigInt("0xffffffffffffffff"),// 截止到 16 个 f，数值溢出，需要使用 bigint
-        ));
-
-        blocks = MemoryBlock.padding(MemoryBlock.descend(blocks));
-
-        blocks = MemoryBlock.merge(blocks);
-
-        return this.drawMemoryBlocks(canvas, origin, blocks);
-      })
-      .catch(response => {
-
-      });
-  }
-
-  /**
-   * 解析内存映射。
-   *
-   * @param content 内存映射内容
-   * @return  内存块
-   */
-  public static resolveMaps(content: string): MemoryBlock[] {
-    //1                                  2     3         4      5        6
-    //561d970c5000-561d970c6000          r--p  00000000  08:03  1581273  /usr/lib/jvm/java-17-openjdk-amd64/bin/java
-    let lines = content.split("\n");
-
-    // blocks.unshift(new MemoryBlock(
-    //   blocks[blocks.length - 1].endAddress,// bigint 和 bigint 才能相减求 size
-    //   BigInt("0xffffffffffffffff"),// 截止到 16 个 f，数值溢出，需要使用 bigint
-    // ));
-    // blocks.push(new MemoryBlock(BigInt(0), blocks[0].startAddress));// 从 0 开始显示
-    return lines.filter(line => line)
-      .map(line => line.split(/ +/))
-      .map(cells => {
-        let addresses = cells[0].split("-");
-        // 16 个 f 需要使用 bigint 才能表示
-        return new MemoryBlock(
-          BigInt(parseInt(addresses.shift(), 16)),
-          BigInt(parseInt(addresses.shift(), 16)),
-          (cells[5] || "").split("/").pop() || "[anon]",//全路径太长，只取末尾的程序名
-        )
-      });
-  }
-
-  public static drawMemoryLocationKey = "drawMemoryLocation";
-
-  /**
-   * 基于内存映射，绘制虚拟内存。
+   * 交互式地绘制虚拟内存。
    *
    * @param canvas 画布
    * @param origin 起点
    * @param [content] 内容
    * @return 虚拟内存图
    */
-  public drawMemorySelectively(canvas: Canvas = Common.canvas(), origin: Point = Common.windowCenterPoint(), content?: string) {
+  public drawMemoryInteractively(canvas: Canvas = Common.canvas(), origin: Point = Common.windowCenterPoint(), content?: string) {
     return Common.readFileContentSelectively(canvas, MemoryPainter.drawMemoryLocationKey, content)
-      .then(response => this.drawMemory(canvas, origin, response.data))
+      .then(response => {
+        if (response.url && response.url.toString().endsWith(".maps")) {
+          return Memory.parseMaps(response.data);
+        }
+        return Memory.parse(JSON.parse(response.data));
+      })
+      .then(response => this.drawMemory(canvas, origin, response))
       .catch(response => Logger.getLogger().error(response));
   }
 
-  public drawMemory(canvas: Canvas, origin: Point, data: any) {
-    let memory = Memory.parse(data);
+  /** 绘制虚拟内存 */
+  public drawMemory(canvas: Canvas, origin: Point, memory: Memory) {
     let blocks = this.drawMemoryBlocks(canvas, origin, memory.blocks);
     if (!memory.title) return blocks;
     let title = this.drawTitle(canvas, origin, memory.title);
@@ -1635,6 +1827,7 @@ class MemoryPainter {
     return new Group([title, blocks]);
   }
 
+  /** 绘制虚拟内存标题 */
   public drawTitle(canvas: Canvas, origin: Point, title: string) {
     let solid = canvas.addText(title, origin);
     Common.bolder(solid);
@@ -1643,7 +1836,7 @@ class MemoryPainter {
   }
 
   /**
-   * 绘制虚拟内存单元，从下往上绘制。
+   * 绘制虚拟内存块，从下往上绘制。
    *
    * @param canvas 画布
    * @param origin 起点，矩形的左下点
@@ -1651,12 +1844,11 @@ class MemoryPainter {
    * @return  绘制的图形
    */
   public drawMemoryBlocks(canvas: Canvas, origin: Point, blocks: MemoryBlock[]) {
-    MemoryBlock.descend(blocks);
-    MemoryBlock.padding(blocks, false);
+    this.getDirectionHandler().order(blocks);
     this.addressLabelTextLength = MemoryBlock.getMaxAddressLength(blocks, this.addressLabelTextBase);
     // MemoryBlock.merge(blocks);
     let array = blocks.map((block, index) => {
-      if (index !== 0) origin = this.originHandler.getNextBlockOrigin(origin);
+      if (index !== 0) origin = this.getDirectionHandler().getNextBlockOrigin(this, origin);
       // let prev = blocks[index - 1], curr = blocks[index];
       // if (prev.endAddress < curr.startAddress) {
       //   origin = origin.subtract(new Point(0, this.table.cellSize.height));
@@ -1679,11 +1871,12 @@ class MemoryPainter {
    */
   public drawMemoryBlock(canvas: Canvas, origin: Point, block: MemoryBlock) {
     let cell = this.table.drawCell(canvas, origin, block.description);
-    let endpoint = this.originHandler.getNextBlockOrigin(origin);
+    let directionHandler = this.getDirectionHandler();
+    let endpoint = directionHandler.getNextBlockOrigin(this, origin);
     let graphics: Graphic[] = [cell];
     if (this.showAddress) {
-      block.endAddress != null && graphics.push(this.drawMemoryAddress(canvas, origin, block.endAddress))
-      block.startAddress != null && graphics.push(this.drawMemoryAddress(canvas, endpoint, block.startAddress))
+      block.endAddress != null && graphics.push(this.drawMemoryAddress(canvas, origin, directionHandler.getAddressStartValue(this, block)))
+      block.startAddress != null && graphics.push(this.drawMemoryAddress(canvas, endpoint, directionHandler.getAddressEndValue(this, block)))
     }
     if (this.showSize && block.startAddress != null && block.endAddress != null) {
       let size = block.size();
@@ -1703,12 +1896,12 @@ class MemoryPainter {
    */
   public drawMemoryAddress(canvas: Canvas, origin: Point, address: number | bigint) {
     let line = canvas.newLine();
-    origin = this.originHandler.getAddressLineOrigin(origin);
-    line.points = [origin, this.originHandler.getAddressLineEndpoint(origin)];
+    origin = this.getDirectionHandler().getAddressLineOrigin(this, origin);
+    line.points = [origin, this.getDirectionHandler().getAddressLineEndpoint(this, origin)];
     line.shadowColor = null;
 
     let formattedAddress = this.formatMemoryAddress(address);
-    let labelOrigin = this.originHandler.getAddressLabelOrigin(line.points[1]);
+    let labelOrigin = this.getDirectionHandler().getAddressLabelOrigin(this, line.points[1]);
     let label = canvas.addText(formattedAddress, labelOrigin);
     label.magnets = Common.magnets_5;
     this.table.cellTextSize && (label.textSize = this.table.cellTextSize);
@@ -1772,505 +1965,30 @@ var _this = (function () {return this;})();
 //@formatter:on
 (() => {
   let library = new PlugIn.Library(new Version("0.1"));
-  library["Common"] = Common;
-  library["Stepper"] = Stepper;
-  library["LayerSwitcher"] = LayerSwitcher;
-  library["Memory"] = MemoryPainter;
-  [Common, Memory, MemoryBlock].forEach(item => Logger.proxyClassStaticFunction(item));
-  // Logger.proxy(Common.name, _this);
-
-
-  //因为不能直接在 library 上添加属性，所以将属性都定义在 dynamic 中
-  library.dynamic = {
-    direction: "up", //绘制方向
-    rectSize: new Size(200, 70),
-    rectTextSize: undefined,// 字体大小，默认 16
-    rectFillColors: {
-      "[anon]": Color.RGB(0.75, 1.0, 0.75),// 浅绿，已占用但不知道具体用途
-      "": Color.RGB(0.8, 0.8, 0.8),        // 灰色，无描述表示未使用
-      "*": Color.RGB(0.75, 1.0, 1.0),      // 蓝色，有效数据
-    },
-    lineWidth: 100,
-    labelSize: new Size(150, 20),
-    labelTextBase: 16,// 标签文本显示内存地址时使用的进制，栈时使用 10 进制，其他使用 16 进制
-    labelTextLength: 16,
-    showSize: true,     // 是否显示占用空间
-    sizeStyle: 'outer', // 占用空间显示样式：outer、inner
-  };
-
-
-  // Object.defineProperties(library, {
-  //   "dynamic": {
-  //     value: library.dynamic
+  [Common, Memory, MemoryBlock, MemoryPainter, Stepper, LayerSwitcher].forEach(item => {
+    library[item.name] = item;
+    Logger.proxyClassStaticFunction(item);
+  });
+  // library.plugIn.resourceNamed("libs/logger.js").fetch(response => eval(response.toString()));
+  // 反例：其他类库未完成初始化时，不能获取当前类库
+  // 正例：library.plugIn.resourceNamed("logger.js").fetch(response => eval(response.toString()));
+  // eval 时需要注意绑定的对象
+  // library.loadClass = function (name, path = `libs/${name}.js`) {
+  //   console.info("loadLib: ", path);
+  //   if (name in Object) {
+  //     console.info(`lib '${path}' loaded`);
+  //     return new Promise((resolve, reject) => resolve(Object[name]))
   //   }
-  // });
+  //   return this.promiseUrlFetch(this.plugIn.resourceNamed(path))
+  //     .then(response => {
+  //       let content = response.data;
+  //       console.info(`lib '${path}': \n`, content);
+  //       eval(content);
+  //       eval(`Object[name] = ${name}`);
+  //       return Object[name];
+  //     });
+  // }
 
-  library.extractGraphicTexts = function (graphic) {
-    return PeaceTable.extractGraphicTexts(graphic);
-  }
-
-  /**
-   * 设置绘图样式。
-   *
-   * @param style 绘图样式：large、small
-   * @return {void}
-   */
-  library.setStyle = function (style) {
-    let dynamic = this.dynamic;
-    dynamic.labelSize = new Size(150, 20);
-    dynamic.labelTextBase = 16;
-    dynamic.labelTextLength = 16;
-    dynamic.showSize = true;
-    switch (style) {
-      case 'large':
-        dynamic.rectSize = new Size(200, 70);
-        dynamic.rectTextSize = null;
-        dynamic.lineWidth = 100;
-        dynamic.sizeStyle = 'outer';
-        break;
-      case 'small':
-        dynamic.rectSize = new Size(300, 20);
-        dynamic.rectTextSize = 12;
-        dynamic.lineWidth = 20;
-        dynamic.sizeStyle = 'inner';
-        break;
-    }
-  }
-
-  /**
-   * 绘制抽象的虚拟内存。
-   *
-   * @param canvas 画布
-   * @param [origin] 起点
-   * @return  虚拟内存图
-   */
-  library.drawMemoryAbstractly = function (canvas: Canvas, origin: Point, data?: string[]) {
-
-    let locationKey = "drawMemoryAbstractly.location";
-    let common = this.plugIn.library("common");
-
-    if (app.optionKeyDown) return common.option(canvas, locationKey, null);
-    (data
-        ? new Promise((resolve) => resolve(data))
-        : common.readFileContentForGraphic(canvas, locationKey).then(response => JSON.parse(response.data))
-    )
-      .then(response => PeaceTable.small.drawColumn(canvas, origin, response.reverse()))
-      .catch(response => console.error("drawMemoryAbstractly error: ", response))
-  }
-
-  library.drawTableColumn = function (canvas: Canvas, origin: Point) {
-
-    let locationKey = "drawTableColumn.location";
-    Common.readFileContentAssociatively(canvas, locationKey)
-      .then(response => JSON.parse(response.data))
-      .then(response => PeaceTable.small.drawColumn(canvas, origin, response))
-      .catch(response => console.error("drawMemoryAbstractly error: ", response))
-  }
-
-  /**
-   * 绘制抽象的虚拟内存。
-   *
-   * @param canvas 画布
-   * @param [origin] 起点
-   * @return  虚拟内存图
-   */
-  library.drawMemoryStandardly = function (canvas, origin) {
-
-    this.setStyle('large');
-    let common = this.plugIn.library("common");
-    canvas = canvas || common.canvas();
-    origin = origin || common.windowCenterPoint();
-    // echo '"", "代码段(.text)", "已初始化的数据(.data)", "未初始化的数据(.bss)", "堆", "", "共享库的内存映射区域", "", "用户栈", ""' | sed "1i $(seq -s ',' 0 10)" | column -t -s , -o ,
-    //  0 ,1               ,2                       ,3                  ,4    ,5  ,6                 ,7  ,8        ,9
-    let descriptions = [
-      "", "代码段(.text)", "已初始化的数据(.data)", "未初始化的数据(.bss)", "堆", "", "共享库的内存映射区域", "", "用户栈", ""
-    ];
-    let group = this.drawMemoryBlocksAbstractly(canvas, origin, descriptions);
-    let graphics = group.graphics;
-
-    let heapRect = graphics.find(graphic => graphic.text === "堆").geometry;
-    let heapLineStartPoint = common.pointOfRect(heapRect, 'top-center');
-    let heapLineEndPoint = new Point(heapLineStartPoint.x, heapLineStartPoint.y - this.dynamic.rectSize.height);
-    let heapLine = common.drawLine(canvas, [heapLineStartPoint, heapLineEndPoint], "向上增长", true);
-
-    let mmapRect = graphics.find(graphic => graphic.text === "共享库的内存映射区域").geometry;
-    let mmapLineStartPoint = common.pointOfRect(mmapRect, 'bottom-right').add(new Point(20, 0));
-    let mmapLineEndPoint = new Point(mmapLineStartPoint.x, mmapLineStartPoint.y + this.dynamic.rectSize.height);
-    let mmapLine = common.drawLine(canvas, [mmapLineStartPoint, mmapLineEndPoint], "malloc 向下增长", true);
-
-    let stackLineStartPoint = common.pointOfRect(graphics.find(graphic => graphic.text === "用户栈").geometry, 'bottom-center');
-    let stackLineEndPoint = new Point(stackLineStartPoint.x, stackLineStartPoint.y + this.dynamic.rectSize.height);
-    let stackLine = common.drawLine(canvas, [stackLineStartPoint, stackLineEndPoint], "向下增长", true);
-
-    let brkLineEndPoint = heapRect.origin.add(new Point(this.dynamic.rectSize.width, 0));
-    let brkLineStartPoint = brkLineEndPoint.add(new Point(this.dynamic.rectSize.width / 2, 0));
-    let brkLine = common.drawLine(canvas, [brkLineStartPoint, brkLineEndPoint], "堆顶（brk 变量）");
-
-    let directionOffset = new Point(-this.dynamic.rectSize.width, 0);
-    let directionStartPoint = graphics[graphics.length - 1].geometry.center.add(directionOffset);
-    let directionEndPoint = graphics[0].geometry.center.add(directionOffset);
-    let directionLine = common.drawLine(canvas, [directionStartPoint, directionEndPoint], "低地址");
-    let directionEndText = canvas.addText("高地址", directionEndPoint.add(new Point(0, -20)));
-    return new Group([heapLine, mmapLine, stackLine, brkLine, directionLine, directionEndText, group]);
-  }
-
-  /**
-   * 绘制虚拟内存单元，抽象地。
-   *
-   * @param canvas 画布
-   * @param origin 起点，矩形左下角处位置
-   * @param {String[]} descriptions 内存块描述集合
-   * @return  虚拟内存单元图
-   */
-  library.drawMemoryBlocksAbstractly = function (canvas, origin, descriptions) {
-
-    let pointOperator = this.dynamic.direction === "down" ? "add" : "subtract";
-    return new Group(
-      descriptions.map((description, index) => {
-        if (index > 0) {
-          origin = origin[pointOperator](new Point(0, this.dynamic.rectSize.height));
-        }
-        return this.drawMemoryRect(canvas, origin, description);
-      })
-    );
-  }
-
-
-  /**
-   * 绘制栈区抽象虚拟内存。案例参考：variable.stack.json。
-   *
-   * @param canvas 画布
-   * @param [origin] 起点
-   */
-  library.drawStackMemoryAbstractly = function (canvas, origin) {
-
-    this.setStyle("small");
-    this.dynamic.labelTextBase = 10;//为什么栈使用 10 进制，汇编中类似 16(%rip) 的偏移地址使用了 10 进制
-    this.dynamic.showSize = false;
-    let common = this.plugIn.library("common");
-    canvas = canvas || common.canvas();
-    origin = origin || common.windowCenterPoint();
-    common.readFileContentForGraphic(common.selectedGraphic() || canvas, "location-drawStackMemoryAbstractly")
-      .then(responce => {
-        let data = JSON.parse(responce.data);
-        let size = data.size + 8;  // 从 start(=0) + step 到 size
-        this.dynamic.labelTextLength = size.toString().length;
-        this.dynamic.labelSize.width = 50;
-        let blocks = this.buildBlocksForFrame(size);
-
-        blocks = this.sortBlocks(blocks);
-        this.setBlocksForFrame(blocks, data.blocks);
-        this.drawMemoryBlocks(canvas, origin, blocks);
-      })
-      .catch(response => {
-        console.error("readFileContentForGraphic response: ", response);
-      });
-  }
-
-  /**
-   * 构建栈帧内存块集合。
-   *
-   * 汇编代码 'subq    $88, %rsp' 不一定代表栈帧空间。
-   *
-   * @param size 空间，字节数
-   * @param start 起始地址，从 0 开始，和汇编代码相匹配
-   * @param step 步调，每格字节数
-   * @return  内存块集合
-   */
-  library.buildBlocksForFrame = function (size, start = 0, step = 8) {
-
-    let count = size / step;
-    let blocks = [];
-    for (let i = 0; i < count; i++) {
-      blocks.push({startAddress: start, endAddress: start + step});
-      start -= step;
-    }
-    return blocks;
-  }
-
-  /**
-   * 设置栈帧内存块集合。
-   *
-   * @param  template 模板内存块集合
-   * @param  content 内容内存块集合
-   * @param [step] 步调，每格字节数
-   */
-  library.setBlocksForFrame = function (template, content, step = 8) {
-
-    for (let contentBlock of content) {
-      let index = template.findIndex(block => block.startAddress === contentBlock.startAddress);
-      if (index === -1) return
-      let endAddress = contentBlock.startAddress + (contentBlock.size || step);
-      while (template[index] && template[index].endAddress <= endAddress) {
-        template[index++].description = contentBlock.description;
-      }
-    }
-  }
-
-  /**
-   * 基于内存映射，绘制虚拟内存。
-   *
-   * @param canvas 画布
-   * @param [origin] 起点
-   * @param [content] 内容
-   * @param [location] 内容
-   * @return  虚拟内存图
-   */
-  library.drawMemoryForMaps = function (canvas, origin, content, location) {
-
-    this.setStyle('small');
-    let common = this.plugIn.library("common");
-    canvas = canvas || common.canvas();
-    origin = origin || common.windowCenterPoint();
-    // readFileContentForGraphic(canvas, "maps-location")
-    return (content ? new Promise(resolve => resolve({data: content})) : common.selectFile())
-      // return (location ? common.readFileContent(location) : common.selectFile())
-      .then(response => {
-
-        let blocks = this.resolveMaps(response.data);
-        blocks.unshift({startAddress: 0n, endAddress: blocks[0].startAddress});// 从 0 开始显示
-        blocks.push({
-          startAddress: blocks[blocks.length - 1].endAddress,// bigint 和 bigint 才能相减求 size
-          endAddress: bigint("0xffffffffffffffff"), // 截止到 16 个 f，数值溢出，需要使用 bigint
-        });
-
-        blocks = this.paddingBlocks(this.sortBlocks(blocks));
-
-        blocks = this.mergeBlocks(blocks);
-
-        return this.drawMemoryBlocks(canvas, origin, blocks);
-      })
-      .catch(response => {
-        console.error("selectFile response: ", response);
-      });
-  }
-
-  /**
-   * 解析内存映射。
-   *
-   * @param content 内存映射内容
-   * @return  内存块
-   */
-  library.resolveMaps = function (content) {
-    //1                                  2     3         4      5        6
-    //561d970c5000-561d970c6000          r--p  00000000  08:03  1581273  /usr/lib/jvm/java-17-openjdk-amd64/bin/java
-
-    let lines = content.split("\n");
-
-    return lines.filter(line => line)
-      .map(line => line.split(/ +/))
-      .map(cells => {
-        let addresses = cells[0].split("-");
-        // 16 个 f 需要使用 bigint 才能表示
-        return {
-          // startAddress: parseInt(addresses.shift(), 16),
-          startAddress: bigint(parseInt(addresses.shift(), 16)),
-          // endAddress: parseInt(addresses.shift(), 16),
-          endAddress: bigint(parseInt(addresses.shift(), 16)),
-          description: (cells[5] || "").split("/").pop() || "[anon]" //全路径太长，只取末尾的程序名
-        };
-      });
-  }
-
-  /**
-   * 合并相同描述的相邻内存块。此处假设相同描述的内存块是连续的。
-   *
-   * @param  blocks 内存块集合
-   * @return  内存块集合
-   */
-  library.mergeBlocks = function (blocks) {
-    for (let i = 1; i < blocks.length; i++) {
-      let prev = blocks[i - 1], curr = blocks[i];
-      if (prev.description === curr.description) {
-        prev.endAddress = curr.endAddress; // 上一块的结束地址指向当前块的结束地址
-        blocks.splice(i, 1); // 删除当前块
-        i--;
-      }
-    }
-    return blocks;
-  }
-
-  /**
-   * 排序内存块集合。
-   * @param  blocks 内存块集合
-   * @return  等于输入的内存块集合
-   */
-  library.sortBlocks = function (blocks) {
-    blocks.sort((left, right) => left.startAddress - right.startAddress);
-    return blocks;
-  }
-
-  /**
-   * 对齐内存块集合。
-   * 内存地址应该是连续的，在空缺处补齐。
-   * @param  blocks 内存块集合
-   * @return  等于输入的内存块集合
-   */
-  library.paddingBlocks = function (blocks) {
-    for (let i = 1; i < blocks.length; i++) {
-      let prev = blocks[i - 1], curr = blocks[i];
-      //地址不连续，补齐空缺
-      if (prev.endAddress < curr.startAddress) {
-        blocks.splice(i, 0, {startAddress: prev.endAddress, endAddress: curr.startAddress});
-        i++;
-      }
-    }
-    return blocks;
-  }
-
-  /**
-   * 绘制虚拟内存单元，从下往上绘制。
-   *
-   * @param canvas 画布
-   * @param origin 起点，矩形的左下点
-   * @param  blocks 内存块集合
-   * @return  绘制的图形
-   */
-  library.drawMemoryBlocks = function (canvas, origin, blocks) {
-
-    let array = blocks.map((block, index) => {
-      // PeaceConsole.root.info(`block: ${JSON.stringify(block)}`);
-      if (index === 0) return this.drawMemoryBlock(canvas, origin, block);
-
-      origin = origin.subtract(new Point(0, this.dynamic.rectSize.height));
-      let prev = blocks[index - 1], curr = blocks[index];
-      if (prev.endAddress < curr.startAddress) {
-        origin = origin.subtract(new Point(0, this.dynamic.rectSize.height));
-      } else if (prev.endAddress > curr.startAddress) {
-        origin = origin.add(new Point(0, this.dynamic.rectSize.height / 2));
-      }
-      return this.drawMemoryBlock(canvas, origin, block)
-    });
-    return new Group(array);
-  }
-
-
-  /**
-   * 绘制虚拟内存单元，从下往上绘制。
-   *
-   * @param canvas 画布
-   * @param startPoint 起点，矩形左下角处位置
-   * @param block 内存块
-   * @return  绘制的图形
-   */
-  library.drawMemoryBlock = function (canvas, startPoint, block) {
-    // PeaceConsole.root.info(`drawMemoryBlock. startPoint=${startPoint}, block=${block}`);
-    let dynamic = this.dynamic;
-    let endpoint = new Point(startPoint.x, startPoint.y - dynamic.rectSize.height);
-    let graphics = [
-      this.drawMemoryRect(canvas, endpoint, block.description),
-      this.drawMemoryAddress(canvas, startPoint, block.startAddress),
-      this.drawMemoryAddress(canvas, endpoint, block.endAddress),
-    ];
-    if (!dynamic.showSize) return new Group(graphics);
-    let size = Number(block.endAddress - block.startAddress);
-    if (dynamic.sizeStyle === 'outer') graphics.push(this.drawMemorySize(canvas, endpoint, size));
-    else graphics[0].text += ` (${Common.formatMemorySize(size)})`;
-    return new Group(graphics);
-  }
-
-  /**
-   * 绘制内存矩形。
-   *
-   * @param canvas 画布
-   * @param location 位置
-   * @param [description] 描述
-   * @return {Shape} 绘制的图形
-   */
-  library.drawMemoryRect = function (canvas, location, description) {
-    let dynamic = this.dynamic, rectSize = dynamic.rectSize;
-    let shape = canvas.newShape();
-    shape.geometry = new Rect(location.x, location.y, rectSize.width, rectSize.height);
-    shape.shadowColor = null;
-    dynamic.rectTextSize && (shape.textSize = dynamic.rectTextSize);
-    // Color.RGB(1.0, 1.0, 0.75)
-    shape.fillColor = dynamic.rectFillColors[description || ""] || dynamic.rectFillColors["*"];
-    description && (shape.text = description);
-    //磁体、磁极：可连线的点
-    shape.magnets = [new Point(0, 0), new Point(1.00, 1.00), new Point(1.00, -1.00), new Point(-1.00, -1.00), new Point(-1.00, 1.00),];
-    return shape;
-  }
-
-  /**
-   * 绘制虚拟内存单元地址。
-   *
-   * @param canvas 画布
-   * @param origin 起点
-   * @param {Number|bigint} address 地址
-   * @return 绘制的图形
-   */
-  library.drawMemoryAddress = function (canvas, origin, address) {
-    let line = canvas.newLine();
-    line.shadowColor = null;
-    let lineStartPoint = origin;
-    let lineEndPoint = new Point(lineStartPoint.x - this.dynamic.lineWidth, lineStartPoint.y);
-    line.points = [lineStartPoint, lineEndPoint];
-
-    let label = canvas.newShape();
-    label.geometry = new Rect(
-      lineEndPoint.x - this.dynamic.labelSize.width,
-      lineEndPoint.y - this.dynamic.labelSize.height / 2,
-      this.dynamic.labelSize.width, this.dynamic.labelSize.height
-    );
-    label.shadowColor = null;
-    label.strokeThickness = 0;
-    label.text = this.formatMemoryAddress(address);
-    label.textSize = 12;
-    label.fillColor = null;
-    label.textHorizontalAlignment = HorizontalTextAlignment.Right;
-    return new Group([line, label]);
-  }
-
-  /**
-   * 格式化内存地址。
-   *
-   * PlugIn.find('com.github.peacetrue.learn.graffle').library('memory').formatMemoryAddress(bigint("0xffffffffffffffff"))
-   *
-   * @param {Number|bigint} address 内存地址
-   * @return  内存地址描述
-   */
-  library.formatMemoryAddress = function (address) {
-    let dynamic = this.dynamic;
-    let text = address < 0 ? '-' : ' '; //符号位
-    if (dynamic.labelTextBase === 16) text += '0x'; //16 进制标志
-    let absAddress = address > 0 ? address : -address;
-    return text + absAddress.toString(dynamic.labelTextBase).leftPad(dynamic.labelTextLength, '0');
-  }
-
-  /**
-   * 绘制内存空间尺寸。
-   *
-   * @param canvas 画布
-   * @param location 位置
-   * @param size 空间尺寸
-   * @return 绘制的图形
-   */
-  library.drawMemorySize = function (canvas, location, size) {
-    let dynamic = this.dynamic;
-    let upLine = canvas.newLine();
-    upLine.shadowColor = null;
-    let upLineStartPoint = new Point(location.x - dynamic.lineWidth - dynamic.labelSize.width / 2, location.y + dynamic.labelSize.height / 2);
-    let upLineEndPoint = new Point(upLineStartPoint.x, upLineStartPoint.y + dynamic.rectSize.height / 2 - dynamic.labelSize.height);
-    upLine.points = [upLineStartPoint, upLineEndPoint];
-    upLine.headType = "FilledArrow";
-
-    let label = canvas.newShape();
-    label.geometry = new Rect(upLineStartPoint.x - dynamic.labelSize.width / 2, upLineEndPoint.y, dynamic.labelSize.width, dynamic.labelSize.height);
-    label.shadowColor = null;
-    label.strokeThickness = 0;
-    label.text = Common.formatMemorySize(size);
-    label.textSize = 12;
-    label.fillColor = null;
-    label.textHorizontalAlignment = HorizontalTextAlignment.Center;
-
-    let bottomLine = canvas.newLine();
-    bottomLine.shadowColor = null;
-    let bottomLineStartPoint = new Point(upLineStartPoint.x, location.y + dynamic.rectSize.height - dynamic.labelSize.height / 2);
-    let bottomLineEndPoint = new Point(bottomLineStartPoint.x, bottomLineStartPoint.y - dynamic.rectSize.height / 2 + dynamic.labelSize.height);
-    bottomLine.points = [bottomLineStartPoint, bottomLineEndPoint];
-    bottomLine.headType = "FilledArrow";
-    return new Group([upLine, label, bottomLine]);
-  }
-
+  // Logger.proxy(Common.name, _this);
   return library;
 })();

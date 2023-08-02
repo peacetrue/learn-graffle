@@ -26,18 +26,6 @@
     },
     {
       "image": "icon.png",
-      "identifier": "memory_draw_abstractly"
-    },
-    {
-      "image": "icon.png",
-      "identifier": "memory_draw_stack_abstractly"
-    },
-    {
-      "image": "icon.png",
-      "identifier": "memory_draw_maps"
-    },
-    {
-      "image": "icon.png",
       "identifier": "text_load"
     },
     {
@@ -64,9 +52,6 @@
   "libraries": [
     {
       "identifier": "common"
-    },
-    {
-      "identifier": "memory"
     },
     {
       "identifier": "entity"

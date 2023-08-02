@@ -5,19 +5,18 @@
 == 源码结构
 
 . docs：文档
-. automation：自动化
+. src：源文件目录
 .. code：拷贝为 JavaScript，通过图形观察其代码实现
 .. plugins：插件
-... simple：简单插件
 ... bundle：捆绑插件
 .... peace.omnigrafflejs：学习案例
-.... PlugInTemplate.omnigrafflejs：官网案例
+... simple：简单插件
 ... entity.html：实体类 html 效果
 .. script：脚本，包含脚本内容和脚本参数
-.. Makefile：封装脚本命令
-.. demo-jdk：绘制 jdk 源码类图的 Shell 脚本
-.. demo-memory：绘制虚拟内存的 Shell 脚本
-.. demo-sc2046：使用引号和不使用引号的区别
+. demo-jdk：绘制 jdk 源码类图的 Shell 脚本
+. demo-memory：绘制虚拟内存的 Shell 脚本
+. demo-sc2046：使用引号和不使用引号的区别
+. Makefile：封装脚本命令
 
 == 插件
 
@@ -58,3 +57,9 @@
 
 .使用案例：
 . `Make`
+
+== 附录
+
+* https://support.omnigroup.com/documentation/omnigraffle/mac/7.19/en/[Omni Graffle^]
+* https://support.omnigroup.com/documentation/omnigraffle/mac/7.19/en/menus-and-keyboard-shortcuts/[Omni Graffle 快捷键^]
+* https://support.omnigroup.com/documentation/omnigraffle/mac/7.19/en/menus-and-keyboard-shortcuts/[Omni Graffle 快捷键^]

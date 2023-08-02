@@ -9,3 +9,9 @@
 == 1.1.0
 
 图层切换实现动画效果。
+
+== 1.2.0
+
+. 目录结构调整：automation 变更为 src
+. 拆分 Makefile 文件
+. 重构类库组织方式：All in common.ts

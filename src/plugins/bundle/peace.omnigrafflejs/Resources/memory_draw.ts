@@ -1,9 +1,9 @@
 (() => {
   let action = new PlugIn.Action(function (selection: Selection) {
     let that: PlugIn.Action = this;
-    let library = that.plugIn.library("memory");
+    let library = that.plugIn.library("common");
     // let common: typeof Common = library["Common"];
-    let memory: typeof Memory = library["Memory"];
+    let memory: typeof MemoryPainter = library["MemoryPainter"];
     memory.drawMemory();
   });
   action.validate = function (selection: Selection) {

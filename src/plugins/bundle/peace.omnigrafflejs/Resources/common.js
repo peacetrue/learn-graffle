@@ -13,17 +13,6 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
-var __assign = (this && this.__assign) || function () {
-    __assign = Object.assign || function(t) {
-        for (var s, i = 1, n = arguments.length; i < n; i++) {
-            s = arguments[i];
-            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
-                t[p] = s[p];
-        }
-        return t;
-    };
-    return __assign.apply(this, arguments);
-};
 var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
     if (pack || arguments.length === 2) for (var i = 0, l = from.length, ar; i < l; i++) {
         if (ar || !(i in from)) {
@@ -89,14 +78,14 @@ var Logger = /** @class */ (function () {
     /** 记录日志信息 */
     Logger.prototype.log = function (level, args) {
         Logger.log("Logger.log: level=".concat(level, ", args=").concat(args));
-        if (this.isLevelEnabled(level)) {
-            var levelName = LoggerLevel[level];
-            var formattedLevelName = Logger.leftPad(levelName, 5, ' ');
-            var indent = "  ".repeat(Logger.functionHierarchy);
-            levelName = levelName.toLowerCase();
-            Logger.log("Logger.log: levelName=".concat(levelName, ", levelName in console="), levelName in console);
-            console[levelName in console ? levelName : "info"].apply(console, __spreadArray(["[".concat(formattedLevelName, "]"), indent], args, false));
-        }
+        if (!this.isLevelEnabled(level))
+            return;
+        var levelName = LoggerLevel[level];
+        var formattedLevelName = Logger.leftPad(levelName, 5, ' ');
+        var indent = "  ".repeat(Logger.functionHierarchy);
+        levelName = levelName.toLowerCase();
+        Logger.log("Logger.log: levelName=".concat(levelName, ", levelName in console="), levelName in console);
+        console[levelName in console ? levelName : "info"].apply(console, __spreadArray(["[".concat(formattedLevelName, "]"), indent], args, false));
     };
     Logger.leftPad = function (src, length, paddingChar) {
         if (paddingChar === void 0) { paddingChar = ' '; }
@@ -141,16 +130,23 @@ var Logger = /** @class */ (function () {
     Logger.proxyInstance = function (instance) {
         return new Proxy(instance, {
             get: function (target, name, receiver) {
-                if (target.hasOwnProperty(name)) {
-                    return Reflect.get(target, name, receiver);
-                }
                 var value = target[name];
-                if (typeof value === "function") {
+                // 排除继承的方法，例如：Object 上的
+                if (!(name in Object.prototype) && typeof value === "function") {
                     return Logger.buildFunctionProxy(value, instance.constructor.name, name.toString());
                 }
+                // if (Logger.isCustomType(value)) return Logger.proxyInstance(value);
                 return value;
             },
         });
+    };
+    Logger.isCustomType = function (value) {
+        return value != null && value.constructor && !Logger.isSimpleType(value);
+    };
+    Logger.isSimpleType = function (value) {
+        return [Object, Number, Boolean, String, Array]
+            .map(function (item) { return item.name; })
+            .includes(value.constructor.name);
     };
     /**
      * 代理类上的静态函数，不代理类函数本身
@@ -199,6 +195,8 @@ var Logger = /** @class */ (function () {
         _a[Logger.CATEGORY_ROOT] = LoggerLevel.DEBUG,
         _a["Common"] = LoggerLevel.DEBUG,
         _a["MemoryPainter.incrementOrigin"] = LoggerLevel.WARN,
+        _a["MemoryPainter.subtract"] = LoggerLevel.WARN,
+        _a["MemoryPainter.getDirectionHandler"] = LoggerLevel.WARN,
         _a);
     /** 日志缓存，category 为 key */
     Logger.loggers = {};
@@ -336,12 +334,8 @@ var Common = /** @class */ (function () {
      */
     Common.readFileContentSelectively = function (object, locationKey, content) {
         return (content
-            ? Common.promise({ data: content })
-            : Common.readFileContentAssociatively(object, locationKey))
-            .then(function (response) {
-            Logger.getLogger().debug("response.data: \n", response.data);
-            return __assign(__assign({}, response), { data: JSON.parse(response.data) });
-        });
+            ? Common.promise({ url: null, data: content })
+            : Common.readFileContentAssociatively(object, locationKey));
     };
     /**
      * 从文件读取内容后设置到图形中。
@@ -743,6 +737,29 @@ var Common = /** @class */ (function () {
     Common.canvasOptions = {};
     return Common;
 }());
+/**
+ * 枚举，key 为名称，value 为索引
+ * 示例：{0: "BOTTOM_UP", 1: "LEFT_RIGHT", 2: "RIGHT_LEFT", BOTTOM_UP: 0, LEFT_RIGHT: 1, RIGHT_LEFT: 2}
+ */
+var Enum = /** @class */ (function () {
+    function Enum() {
+    }
+    Enum.view = function (enums) {
+        var keys = Object.keys(enums);
+        console.info("keys: ", keys);
+        var values = Object.values(enums);
+        console.info("values: ", values);
+    };
+    Enum.keys = function (enums) {
+        var keys = Object.keys(enums);
+        return keys.slice(keys.length / 2);
+    };
+    Enum.values = function (enums) {
+        var keys = Object.values(enums);
+        return keys.slice(keys.length / 2);
+    };
+    return Enum;
+}());
 /** 索引切换者。*/
 var IndexSwitcher = /** @class */ (function () {
     function IndexSwitcher(start, end, current) {
@@ -1108,7 +1125,7 @@ var PeaceTable = /** @class */ (function () {
         table.cellSize = cellSize;
         table.cellTextSize = cellTextSize;
         table.cellFillColor = cellFillColor;
-        return table;
+        return Logger.proxyInstance(table);
     };
     /**
      * 绘制表格。
@@ -1217,8 +1234,10 @@ var PeaceTable = /** @class */ (function () {
     PeaceTable.extractSolidText = function (solid) {
         return solid.text;
     };
-    PeaceTable.defaults = Logger.proxyInstance(PeaceTable.instance(new Size(200, 70), 12, Color.RGB(1.0, 1.0, 0.75, null)));
-    PeaceTable.small = Logger.proxyInstance(PeaceTable.instance(new Size(200, 20), 12, Color.RGB(1.0, 1.0, 0.75, null)));
+    PeaceTable.defaults = PeaceTable.instance(new Size(200, 70), 12, Color.RGB(1.0, 1.0, 0.75, null));
+    PeaceTable.small = PeaceTable.instance(new Size(200, 20), 12, Color.RGB(1.0, 1.0, 0.75, null));
+    /** 倾向于水平绘图，宽度调小 */
+    PeaceTable.horizontal = PeaceTable.instance(new Size(150, 20), 12, Color.RGB(1.0, 1.0, 0.75, null));
     PeaceTable.cellFillColors = {
         "[anon]": Color.RGB(0.75, 1.0, 0.75, null),
         "": Color.RGB(0.8, 0.8, 0.8, null),
@@ -1244,6 +1263,12 @@ var Memory = /** @class */ (function () {
         }
         return this.instance(data["title"], MemoryBlock.parse(data["blocks"]));
     };
+    Memory.parseMaps = function (content) {
+        return this.instance(null, MemoryBlock.parseMaps(content));
+    };
+    Memory.prototype.toString = function () {
+        return JSON.stringify(this);
+    };
     return Memory;
 }());
 /** 内存块 */
@@ -1253,12 +1278,17 @@ var MemoryBlock = /** @class */ (function () {
         this.endAddress = endAddress;
         this.description = description;
     }
+    /** 实例化 */
+    MemoryBlock.instance = function (object) {
+        return Object.assign(new MemoryBlock(undefined, undefined, undefined), object);
+    };
     MemoryBlock.prototype.size = function () {
         return MemoryBlock.subtract(this.endAddress, this.startAddress);
     };
     MemoryBlock.prototype.toString = function () {
         return "'".concat(this.description, "':").concat(this.startAddress, "~").concat(this.endAddress);
     };
+    /** 获取最大的地址长度，需要将所有地址格式化成统一长度 */
     MemoryBlock.getMaxAddressLength = function (blocks, base) {
         if (base === void 0) { base = 10; }
         return Math.max.apply(Math, blocks.map(function (block) { return block.endAddress == null ? 0 : block.endAddress.toString(base).length; }));
@@ -1269,12 +1299,7 @@ var MemoryBlock = /** @class */ (function () {
     /** 将记录转换为内存块对象 */
     MemoryBlock.parse = function (object) {
         var _this_1 = this;
-        return object.map(function (item) { return _this_1.wrap(item); });
-    };
-    /** 将记录转换为内存块对象 */
-    MemoryBlock.wrap = function (object) {
-        return object instanceof MemoryBlock ? object
-            : new MemoryBlock(parseInt(object['startAddress']), parseInt(object['endAddress']), object['description']);
+        return object.map(function (item) { return _this_1.instance(item); });
     };
     /** 按内存地址升序排列 */
     MemoryBlock.ascend = function (blocks) {
@@ -1325,58 +1350,199 @@ var MemoryBlock = /** @class */ (function () {
             }
         }
     };
+    /** 解析内存映射，升序排列。linux 下 /proc/<pid>/maps 内容 */
+    MemoryBlock.parseMaps = function (content) {
+        //1                                  2     3         4      5        6
+        //561d970c5000-561d970c6000          r--p  00000000  08:03  1581273  /usr/lib/jvm/java-17-openjdk-amd64/bin/java
+        var lines = content.split("\n");
+        var blocks = lines
+            .filter(function (line) { return line.trim(); }) // 删除空行
+            .map(function (line) { return line.split(/ +/); }) // 按空格分割
+            .map(function (cells) {
+            var addresses = cells[0].split("-");
+            // 16 个 f 需要使用 bigint 才能表示
+            return new MemoryBlock(BigInt(parseInt(addresses[0], 16)), BigInt(parseInt(addresses[1], 16)), (cells[5] || "").split("/").pop() || "[anon]");
+        });
+        // 填充顶部
+        blocks.unshift(new MemoryBlock(BigInt(0), blocks[0].startAddress)); // 从 0 开始显示
+        // 填充尾部
+        blocks.push(new MemoryBlock(blocks[blocks.length - 1].endAddress, // bigint 和 bigint 才能相减求 size
+        BigInt("0xffffffffffffffff")));
+        this.merge(blocks);
+        return blocks;
+    };
     return MemoryBlock;
 }());
-/** 内存绘制方向 */
+/**
+ * 绘图方向始终是从上向下，
+ * 内存块集合传入时约定为升序排列（无序会自动排序），
+ * 通过控制内存块集合的排序（升序/降序），可以控制内存的显示方向
+ */
 var MemoryDirection;
 (function (MemoryDirection) {
-    MemoryDirection[MemoryDirection["BOTTOM_UP"] = 0] = "BOTTOM_UP";
-    MemoryDirection[MemoryDirection["LEFT_RIGHT"] = 1] = "LEFT_RIGHT";
+    MemoryDirection[MemoryDirection["LEFT_RIGHT"] = 0] = "LEFT_RIGHT";
+    MemoryDirection[MemoryDirection["RIGHT_LEFT"] = 1] = "RIGHT_LEFT";
+    MemoryDirection[MemoryDirection["UP_BOTTOM"] = 2] = "UP_BOTTOM";
+    MemoryDirection[MemoryDirection["BOTTOM_UP"] = 3] = "BOTTOM_UP";
 })(MemoryDirection || (MemoryDirection = {}));
-var MemoryOriginHandler = /** @class */ (function () {
-    function MemoryOriginHandler(memoryPainter) {
-        this.memoryPainter = memoryPainter;
+var MemoryDirectionHandlerAdapter = /** @class */ (function () {
+    function MemoryDirectionHandlerAdapter() {
     }
-    MemoryOriginHandler.prototype.getAddressLineOrigin = function (origin) {
+    MemoryDirectionHandlerAdapter.prototype.order = function (blocks) {
+    };
+    MemoryDirectionHandlerAdapter.prototype.getNextBlockOrigin = function (painter, origin) {
         return origin;
     };
-    return MemoryOriginHandler;
+    MemoryDirectionHandlerAdapter.prototype.getAddressLineOrigin = function (painter, origin) {
+        return origin;
+    };
+    MemoryDirectionHandlerAdapter.prototype.getAddressLineEndpoint = function (painter, origin) {
+        return origin;
+    };
+    MemoryDirectionHandlerAdapter.prototype.getAddressLabelOrigin = function (painter, origin) {
+        return origin;
+    };
+    MemoryDirectionHandlerAdapter.prototype.getAddressStartValue = function (painter, block) {
+        throw new Error("The method must be overwrite!");
+    };
+    MemoryDirectionHandlerAdapter.prototype.getAddressEndValue = function (painter, block) {
+        throw new Error("The method must be overwrite!");
+    };
+    return MemoryDirectionHandlerAdapter;
 }());
-var BottomUpHandler = /** @class */ (function (_super) {
-    __extends(BottomUpHandler, _super);
-    function BottomUpHandler() {
+/** 顺序 */
+var MemoryOrderHandler = /** @class */ (function (_super) {
+    __extends(MemoryOrderHandler, _super);
+    function MemoryOrderHandler() {
         return _super !== null && _super.apply(this, arguments) || this;
     }
-    BottomUpHandler.prototype.getNextBlockOrigin = function (origin) {
-        return origin.add(new Point(0, this.memoryPainter.table.cellSize.height));
+    /** 排序内存块集合 */
+    MemoryOrderHandler.prototype.order = function (blocks) {
+        MemoryBlock.ascend(blocks);
+        MemoryBlock.padding(blocks, true);
     };
-    BottomUpHandler.prototype.getAddressLineEndpoint = function (origin) {
-        return origin.subtract(new Point(this.memoryPainter.addressLineLength, 0));
+    MemoryOrderHandler.prototype.getAddressStartValue = function (painter, block) {
+        return block.startAddress;
     };
-    BottomUpHandler.prototype.getAddressLabelOrigin = function (origin) {
-        return origin.subtract(new Point(this.memoryPainter.addressLabelTextLength / 2 * 8, 0));
+    MemoryOrderHandler.prototype.getAddressEndValue = function (painter, block) {
+        return block.endAddress;
     };
-    return BottomUpHandler;
-}(MemoryOriginHandler));
+    MemoryOrderHandler.defaults = new MemoryOrderHandler();
+    return MemoryOrderHandler;
+}(MemoryDirectionHandlerAdapter));
+/** 逆序 */
+var MemoryReverseHandler = /** @class */ (function (_super) {
+    __extends(MemoryReverseHandler, _super);
+    function MemoryReverseHandler() {
+        return _super !== null && _super.apply(this, arguments) || this;
+    }
+    /** 排序内存块集合 */
+    MemoryReverseHandler.prototype.order = function (blocks) {
+        MemoryBlock.descend(blocks);
+        MemoryBlock.padding(blocks, false);
+    };
+    MemoryReverseHandler.prototype.getAddressStartValue = function (painter, block) {
+        return block.endAddress;
+    };
+    MemoryReverseHandler.prototype.getAddressEndValue = function (painter, block) {
+        return block.startAddress;
+    };
+    MemoryReverseHandler.defaults = new MemoryReverseHandler();
+    return MemoryReverseHandler;
+}(MemoryDirectionHandlerAdapter));
+var MemoryHorizontalHandler = /** @class */ (function (_super) {
+    __extends(MemoryHorizontalHandler, _super);
+    function MemoryHorizontalHandler() {
+        return _super !== null && _super.apply(this, arguments) || this;
+    }
+    MemoryHorizontalHandler.prototype.getNextBlockOrigin = function (painter, origin) {
+        return origin.add(new Point(painter.table.cellSize.width, 0));
+    };
+    MemoryHorizontalHandler.prototype.getAddressLineOrigin = function (painter, origin) {
+        return origin.add(new Point(0, painter.table.cellSize.height));
+    };
+    MemoryHorizontalHandler.prototype.getAddressLineEndpoint = function (painter, origin) {
+        return origin.add(new Point(0, painter.addressLineLength));
+    };
+    MemoryHorizontalHandler.prototype.getAddressLabelOrigin = function (painter, origin) {
+        return origin.add(new Point(0, 12 / 2));
+    };
+    MemoryHorizontalHandler.defaults = new MemoryHorizontalHandler();
+    return MemoryHorizontalHandler;
+}(MemoryDirectionHandlerAdapter));
+var MemoryVerticalHandler = /** @class */ (function (_super) {
+    __extends(MemoryVerticalHandler, _super);
+    function MemoryVerticalHandler() {
+        return _super !== null && _super.apply(this, arguments) || this;
+    }
+    MemoryVerticalHandler.prototype.getNextBlockOrigin = function (painter, origin) {
+        return origin.add(new Point(0, painter.table.cellSize.height));
+    };
+    MemoryVerticalHandler.prototype.getAddressLineEndpoint = function (painter, origin) {
+        return origin.subtract(new Point(painter.addressLineLength, 0));
+    };
+    MemoryVerticalHandler.prototype.getAddressLabelOrigin = function (painter, origin) {
+        return origin.subtract(new Point(painter.addressLabelTextLength / 2 * 8, 0));
+    };
+    MemoryVerticalHandler.defaults = new MemoryVerticalHandler();
+    return MemoryVerticalHandler;
+}(MemoryDirectionHandlerAdapter));
+var AbstractMemoryDirectionHandler = /** @class */ (function () {
+    function AbstractMemoryDirectionHandler(orderHandler, directionHandler) {
+        this.orderHandler = orderHandler;
+        this.directionHandler = directionHandler;
+    }
+    AbstractMemoryDirectionHandler.prototype.order = function (blocks) {
+        this.orderHandler.order(blocks);
+    };
+    AbstractMemoryDirectionHandler.prototype.getAddressLabelOrigin = function (painter, origin) {
+        return this.directionHandler.getAddressLabelOrigin(painter, origin);
+    };
+    AbstractMemoryDirectionHandler.prototype.getAddressLineEndpoint = function (painter, origin) {
+        return this.directionHandler.getAddressLineEndpoint(painter, origin);
+    };
+    AbstractMemoryDirectionHandler.prototype.getAddressLineOrigin = function (painter, origin) {
+        return this.directionHandler.getAddressLineOrigin(painter, origin);
+    };
+    AbstractMemoryDirectionHandler.prototype.getNextBlockOrigin = function (painter, origin) {
+        return this.directionHandler.getNextBlockOrigin(painter, origin);
+    };
+    AbstractMemoryDirectionHandler.prototype.getAddressStartValue = function (painter, block) {
+        return this.orderHandler.getAddressStartValue(painter, block);
+    };
+    AbstractMemoryDirectionHandler.prototype.getAddressEndValue = function (painter, block) {
+        return this.orderHandler.getAddressEndValue(painter, block);
+    };
+    return AbstractMemoryDirectionHandler;
+}());
 var LeftRightHandler = /** @class */ (function (_super) {
     __extends(LeftRightHandler, _super);
     function LeftRightHandler() {
-        return _super !== null && _super.apply(this, arguments) || this;
+        return _super.call(this, MemoryOrderHandler.defaults, MemoryHorizontalHandler.defaults) || this;
     }
-    LeftRightHandler.prototype.getNextBlockOrigin = function (origin) {
-        return origin.add(new Point(this.memoryPainter.table.cellSize.width, 0));
-    };
-    LeftRightHandler.prototype.getAddressLineOrigin = function (origin) {
-        return origin.add(new Point(0, this.memoryPainter.table.cellSize.height));
-    };
-    LeftRightHandler.prototype.getAddressLineEndpoint = function (origin) {
-        return origin.add(new Point(0, this.memoryPainter.addressLineLength));
-    };
-    LeftRightHandler.prototype.getAddressLabelOrigin = function (origin) {
-        return origin.add(new Point(0, 12 / 2));
-    };
     return LeftRightHandler;
-}(MemoryOriginHandler));
+}(AbstractMemoryDirectionHandler));
+var RightLeftHandler = /** @class */ (function (_super) {
+    __extends(RightLeftHandler, _super);
+    function RightLeftHandler() {
+        return _super.call(this, MemoryReverseHandler.defaults, MemoryHorizontalHandler.defaults) || this;
+    }
+    return RightLeftHandler;
+}(AbstractMemoryDirectionHandler));
+var UpBottomHandler = /** @class */ (function (_super) {
+    __extends(UpBottomHandler, _super);
+    function UpBottomHandler() {
+        return _super.call(this, MemoryOrderHandler.defaults, MemoryVerticalHandler.defaults) || this;
+    }
+    return UpBottomHandler;
+}(AbstractMemoryDirectionHandler));
+var BottomUpHandler = /** @class */ (function (_super) {
+    __extends(BottomUpHandler, _super);
+    function BottomUpHandler() {
+        return _super.call(this, MemoryReverseHandler.defaults, MemoryVerticalHandler.defaults) || this;
+    }
+    return BottomUpHandler;
+}(AbstractMemoryDirectionHandler));
 /** 内存画师 */
 var MemoryPainter = /** @class */ (function () {
     function MemoryPainter() {
@@ -1390,20 +1556,36 @@ var MemoryPainter = /** @class */ (function () {
         this.showSize = true; // 是否显示占用空间
         this.sizeStyle = "inner"; // 占用空间显示样式：outer、inner
     }
-    MemoryPainter.instanceVertical = function () {
-        var painter = new MemoryPainter();
-        painter.direction = MemoryDirection.BOTTOM_UP;
-        painter.originHandler = Logger.proxyInstance(new BottomUpHandler(painter));
-        return painter;
+    MemoryPainter._instance = function (painter, options) {
+        Object.assign(painter, options);
+        return Logger.proxyInstance(painter);
     };
-    MemoryPainter.instanceHorizontal = function () {
+    MemoryPainter.instance = function (options) {
+        return this._instance(new MemoryPainter(), options);
+    };
+    MemoryPainter.instanceHorizontal = function (options) {
         var painter = new MemoryPainter();
-        painter.direction = MemoryDirection.LEFT_RIGHT;
-        painter.originHandler = Logger.proxyInstance(new LeftRightHandler(painter));
+        painter.table = PeaceTable.horizontal;
         painter.addressLineLength = 25;
         painter.addressLabelTextBase = 10;
         painter.showSize = false;
-        return painter;
+        return this._instance(painter, options);
+    };
+    MemoryPainter.buildDirectionHandlers = function () {
+        var _a;
+        var directionHandlers = (_a = {},
+            _a[MemoryDirection.LEFT_RIGHT] = new LeftRightHandler(),
+            _a[MemoryDirection.RIGHT_LEFT] = new RightLeftHandler(),
+            _a[MemoryDirection.UP_BOTTOM] = new UpBottomHandler(),
+            _a[MemoryDirection.BOTTOM_UP] = new BottomUpHandler(),
+            _a);
+        Object.keys(directionHandlers).forEach(function (value, index) {
+            directionHandlers[value] = Logger.proxyInstance(directionHandlers[value]);
+        });
+        return directionHandlers;
+    };
+    MemoryPainter.prototype.getDirectionHandler = function () {
+        return MemoryPainter.directionHandlers[this.direction];
     };
     /**
      * 绘制地址空间布局。
@@ -1422,82 +1604,48 @@ var MemoryPainter = /** @class */ (function () {
         // shift 强制重新配置
         if (app.shiftKeyDown || !memory) {
             var form = new Form();
-            form.addField(new Form.Field.Option(this.modeKey, "绘制模式", ["vertical", "horizontal"], ["垂直", "水平"], this.modeValue, null), 0);
+            form.addField(new Form.Field.Option(this.modeKey, "绘制模式", Enum.values(MemoryDirection), Enum.keys(MemoryDirection), this.modeValue, null), 0);
             return form.show("配置地址空间绘制参数", "确定")
-                .then(function (response) { return MemoryPainter.canvasCache[canvasName] = MemoryPainter[response.values[_this_1.modeKey]]; })
-                .then(function (response) { return MemoryPainter.canvasCache[canvasName].drawMemorySelectively(canvas, origin); })
+                .then(function (response) {
+                // Logger.getLogger().debug("form: ", response.values); // error
+                Logger.getLogger().debug("modeKey: ", response.values[_this_1.modeKey]);
+                Logger.getLogger().debug("MemoryDirection: ", MemoryDirection[response.values[_this_1.modeKey]]);
+                memory = MemoryPainter[MemoryDirection[response.values[_this_1.modeKey]]];
+                Logger.getLogger().debug("direction: ", memory.direction);
+                MemoryPainter.canvasCache[canvasName] = memory;
+                memory.drawMemoryInteractively(canvas, origin);
+            })
                 .catch(function (response) { return Logger.getLogger().error("error:", response); });
         }
+        // option 重新选择文件
         if (app.optionKeyDown)
             Common.option(canvas, MemoryPainter.drawMemoryLocationKey, null);
-        memory.drawMemorySelectively(canvas, origin);
+        return memory.drawMemoryInteractively(canvas, origin);
     };
     /**
-     * 基于内存映射，绘制虚拟内存。
-     *
-     * @param canvas 画布
-     * @param origin 起点
-     * @param [content] 内容
-     * @return  虚拟内存图
-     */
-    MemoryPainter.prototype.drawMemoryForMaps = function (canvas, origin, content) {
-        var _this_1 = this;
-        // readFileContentForGraphic(canvas, "maps-location")
-        return (content ? Common.promise({ data: content }) : Common.selectFile())
-            // return (location ? common.readFileContent(location) : common.selectFile())
-            .then(function (response) {
-            var blocks = MemoryPainter.resolveMaps(response.data);
-            blocks.unshift(new MemoryBlock(BigInt(0), blocks[0].startAddress)); // 从 0 开始显示
-            blocks.push(new MemoryBlock(blocks[blocks.length - 1].endAddress, // bigint 和 bigint 才能相减求 size
-            BigInt("0xffffffffffffffff")));
-            blocks = MemoryBlock.padding(MemoryBlock.descend(blocks));
-            blocks = MemoryBlock.merge(blocks);
-            return _this_1.drawMemoryBlocks(canvas, origin, blocks);
-        })
-            .catch(function (response) {
-        });
-    };
-    /**
-     * 解析内存映射。
-     *
-     * @param content 内存映射内容
-     * @return  内存块
-     */
-    MemoryPainter.resolveMaps = function (content) {
-        //1                                  2     3         4      5        6
-        //561d970c5000-561d970c6000          r--p  00000000  08:03  1581273  /usr/lib/jvm/java-17-openjdk-amd64/bin/java
-        var lines = content.split("\n");
-        // blocks.unshift(new MemoryBlock(
-        //   blocks[blocks.length - 1].endAddress,// bigint 和 bigint 才能相减求 size
-        //   BigInt("0xffffffffffffffff"),// 截止到 16 个 f，数值溢出，需要使用 bigint
-        // ));
-        // blocks.push(new MemoryBlock(BigInt(0), blocks[0].startAddress));// 从 0 开始显示
-        return lines.filter(function (line) { return line; })
-            .map(function (line) { return line.split(/ +/); })
-            .map(function (cells) {
-            var addresses = cells[0].split("-");
-            // 16 个 f 需要使用 bigint 才能表示
-            return new MemoryBlock(BigInt(parseInt(addresses.shift(), 16)), BigInt(parseInt(addresses.shift(), 16)), (cells[5] || "").split("/").pop() || "[anon]");
-        });
-    };
-    /**
-     * 基于内存映射，绘制虚拟内存。
+     * 交互式地绘制虚拟内存。
      *
      * @param canvas 画布
      * @param origin 起点
      * @param [content] 内容
      * @return 虚拟内存图
      */
-    MemoryPainter.prototype.drawMemorySelectively = function (canvas, origin, content) {
+    MemoryPainter.prototype.drawMemoryInteractively = function (canvas, origin, content) {
         var _this_1 = this;
         if (canvas === void 0) { canvas = Common.canvas(); }
         if (origin === void 0) { origin = Common.windowCenterPoint(); }
         return Common.readFileContentSelectively(canvas, MemoryPainter.drawMemoryLocationKey, content)
-            .then(function (response) { return _this_1.drawMemory(canvas, origin, response.data); })
+            .then(function (response) {
+            if (response.url && response.url.toString().endsWith(".maps")) {
+                return Memory.parseMaps(response.data);
+            }
+            return Memory.parse(JSON.parse(response.data));
+        })
+            .then(function (response) { return _this_1.drawMemory(canvas, origin, response); })
             .catch(function (response) { return Logger.getLogger().error(response); });
     };
-    MemoryPainter.prototype.drawMemory = function (canvas, origin, data) {
-        var memory = Memory.parse(data);
+    /** 绘制虚拟内存 */
+    MemoryPainter.prototype.drawMemory = function (canvas, origin, memory) {
         var blocks = this.drawMemoryBlocks(canvas, origin, memory.blocks);
         if (!memory.title)
             return blocks;
@@ -1506,6 +1654,7 @@ var MemoryPainter = /** @class */ (function () {
         Common.moveToSolid(title, origin.subtract(new Point(0, title.geometry.height)));
         return new Group([title, blocks]);
     };
+    /** 绘制虚拟内存标题 */
     MemoryPainter.prototype.drawTitle = function (canvas, origin, title) {
         var solid = canvas.addText(title, origin);
         Common.bolder(solid);
@@ -1513,7 +1662,7 @@ var MemoryPainter = /** @class */ (function () {
         return solid;
     };
     /**
-     * 绘制虚拟内存单元，从下往上绘制。
+     * 绘制虚拟内存块，从下往上绘制。
      *
      * @param canvas 画布
      * @param origin 起点，矩形的左下点
@@ -1522,13 +1671,12 @@ var MemoryPainter = /** @class */ (function () {
      */
     MemoryPainter.prototype.drawMemoryBlocks = function (canvas, origin, blocks) {
         var _this_1 = this;
-        MemoryBlock.descend(blocks);
-        MemoryBlock.padding(blocks, false);
+        this.getDirectionHandler().order(blocks);
         this.addressLabelTextLength = MemoryBlock.getMaxAddressLength(blocks, this.addressLabelTextBase);
         // MemoryBlock.merge(blocks);
         var array = blocks.map(function (block, index) {
             if (index !== 0)
-                origin = _this_1.originHandler.getNextBlockOrigin(origin);
+                origin = _this_1.getDirectionHandler().getNextBlockOrigin(_this_1, origin);
             // let prev = blocks[index - 1], curr = blocks[index];
             // if (prev.endAddress < curr.startAddress) {
             //   origin = origin.subtract(new Point(0, this.table.cellSize.height));
@@ -1549,11 +1697,12 @@ var MemoryPainter = /** @class */ (function () {
      */
     MemoryPainter.prototype.drawMemoryBlock = function (canvas, origin, block) {
         var cell = this.table.drawCell(canvas, origin, block.description);
-        var endpoint = this.originHandler.getNextBlockOrigin(origin);
+        var directionHandler = this.getDirectionHandler();
+        var endpoint = directionHandler.getNextBlockOrigin(this, origin);
         var graphics = [cell];
         if (this.showAddress) {
-            block.endAddress != null && graphics.push(this.drawMemoryAddress(canvas, origin, block.endAddress));
-            block.startAddress != null && graphics.push(this.drawMemoryAddress(canvas, endpoint, block.startAddress));
+            block.endAddress != null && graphics.push(this.drawMemoryAddress(canvas, origin, directionHandler.getAddressStartValue(this, block)));
+            block.startAddress != null && graphics.push(this.drawMemoryAddress(canvas, endpoint, directionHandler.getAddressEndValue(this, block)));
         }
         if (this.showSize && block.startAddress != null && block.endAddress != null) {
             var size = block.size();
@@ -1574,11 +1723,11 @@ var MemoryPainter = /** @class */ (function () {
      */
     MemoryPainter.prototype.drawMemoryAddress = function (canvas, origin, address) {
         var line = canvas.newLine();
-        origin = this.originHandler.getAddressLineOrigin(origin);
-        line.points = [origin, this.originHandler.getAddressLineEndpoint(origin)];
+        origin = this.getDirectionHandler().getAddressLineOrigin(this, origin);
+        line.points = [origin, this.getDirectionHandler().getAddressLineEndpoint(this, origin)];
         line.shadowColor = null;
         var formattedAddress = this.formatMemoryAddress(address);
-        var labelOrigin = this.originHandler.getAddressLabelOrigin(line.points[1]);
+        var labelOrigin = this.getDirectionHandler().getAddressLabelOrigin(this, line.points[1]);
         var label = canvas.addText(formattedAddress, labelOrigin);
         label.magnets = Common.magnets_5;
         this.table.cellTextSize && (label.textSize = this.table.cellTextSize);
@@ -1629,11 +1778,17 @@ var MemoryPainter = /** @class */ (function () {
         bottomLine.headType = "FilledArrow";
         return new Group([upLine, label, bottomLine]);
     };
-    MemoryPainter.vertical = Logger.proxyInstance(MemoryPainter.instanceVertical());
-    MemoryPainter.horizontal = Logger.proxyInstance(MemoryPainter.instanceHorizontal());
+    MemoryPainter.LEFT_RIGHT = MemoryPainter.instanceHorizontal({ direction: MemoryDirection.LEFT_RIGHT });
+    MemoryPainter.RIGHT_LEFT = MemoryPainter.instanceHorizontal({ direction: MemoryDirection.RIGHT_LEFT });
+    MemoryPainter.UP_BOTTOM = MemoryPainter.instance({ direction: MemoryDirection.UP_BOTTOM });
+    MemoryPainter.BOTTOM_UP = MemoryPainter.instance({ direction: MemoryDirection.BOTTOM_UP });
+    MemoryPainter.directionHandlers = MemoryPainter.buildDirectionHandlers();
+    /** 缓存每个 canvas 使用的 MemoryPainter */
     MemoryPainter.canvasCache = {};
+    /** 绘制模式-键 */
     MemoryPainter.modeKey = "mode";
-    MemoryPainter.modeValue = "vertical";
+    /** 绘制模式-默认值*/
+    MemoryPainter.modeValue = MemoryDirection.BOTTOM_UP;
     MemoryPainter.drawMemoryLocationKey = "drawMemoryLocation";
     return MemoryPainter;
 }());
@@ -1644,466 +1799,29 @@ var _this = (function () { return this; })();
 //@formatter:on
 (function () {
     var library = new PlugIn.Library(new Version("0.1"));
-    library["Common"] = Common;
-    library["Stepper"] = Stepper;
-    library["LayerSwitcher"] = LayerSwitcher;
-    library["Memory"] = MemoryPainter;
-    [Common, Memory, MemoryBlock].forEach(function (item) { return Logger.proxyClassStaticFunction(item); });
-    // Logger.proxy(Common.name, _this);
-    //因为不能直接在 library 上添加属性，所以将属性都定义在 dynamic 中
-    library.dynamic = {
-        direction: "up",
-        rectSize: new Size(200, 70),
-        rectTextSize: undefined,
-        rectFillColors: {
-            "[anon]": Color.RGB(0.75, 1.0, 0.75),
-            "": Color.RGB(0.8, 0.8, 0.8),
-            "*": Color.RGB(0.75, 1.0, 1.0), // 蓝色，有效数据
-        },
-        lineWidth: 100,
-        labelSize: new Size(150, 20),
-        labelTextBase: 16,
-        labelTextLength: 16,
-        showSize: true,
-        sizeStyle: 'outer', // 占用空间显示样式：outer、inner
-    };
-    // Object.defineProperties(library, {
-    //   "dynamic": {
-    //     value: library.dynamic
+    [Common, Memory, MemoryBlock, MemoryPainter, Stepper, LayerSwitcher].forEach(function (item) {
+        library[item.name] = item;
+        Logger.proxyClassStaticFunction(item);
+    });
+    // library.plugIn.resourceNamed("libs/logger.js").fetch(response => eval(response.toString()));
+    // 反例：其他类库未完成初始化时，不能获取当前类库
+    // 正例：library.plugIn.resourceNamed("logger.js").fetch(response => eval(response.toString()));
+    // eval 时需要注意绑定的对象
+    // library.loadClass = function (name, path = `libs/${name}.js`) {
+    //   console.info("loadLib: ", path);
+    //   if (name in Object) {
+    //     console.info(`lib '${path}' loaded`);
+    //     return new Promise((resolve, reject) => resolve(Object[name]))
     //   }
-    // });
-    library.extractGraphicTexts = function (graphic) {
-        return PeaceTable.extractGraphicTexts(graphic);
-    };
-    /**
-     * 设置绘图样式。
-     *
-     * @param style 绘图样式：large、small
-     * @return {void}
-     */
-    library.setStyle = function (style) {
-        var dynamic = this.dynamic;
-        dynamic.labelSize = new Size(150, 20);
-        dynamic.labelTextBase = 16;
-        dynamic.labelTextLength = 16;
-        dynamic.showSize = true;
-        switch (style) {
-            case 'large':
-                dynamic.rectSize = new Size(200, 70);
-                dynamic.rectTextSize = null;
-                dynamic.lineWidth = 100;
-                dynamic.sizeStyle = 'outer';
-                break;
-            case 'small':
-                dynamic.rectSize = new Size(300, 20);
-                dynamic.rectTextSize = 12;
-                dynamic.lineWidth = 20;
-                dynamic.sizeStyle = 'inner';
-                break;
-        }
-    };
-    /**
-     * 绘制抽象的虚拟内存。
-     *
-     * @param canvas 画布
-     * @param [origin] 起点
-     * @return  虚拟内存图
-     */
-    library.drawMemoryAbstractly = function (canvas, origin, data) {
-        var locationKey = "drawMemoryAbstractly.location";
-        var common = this.plugIn.library("common");
-        if (app.optionKeyDown)
-            return common.option(canvas, locationKey, null);
-        (data
-            ? new Promise(function (resolve) { return resolve(data); })
-            : common.readFileContentForGraphic(canvas, locationKey).then(function (response) { return JSON.parse(response.data); }))
-            .then(function (response) { return PeaceTable.small.drawColumn(canvas, origin, response.reverse()); })
-            .catch(function (response) { return console.error("drawMemoryAbstractly error: ", response); });
-    };
-    library.drawTableColumn = function (canvas, origin) {
-        var locationKey = "drawTableColumn.location";
-        Common.readFileContentAssociatively(canvas, locationKey)
-            .then(function (response) { return JSON.parse(response.data); })
-            .then(function (response) { return PeaceTable.small.drawColumn(canvas, origin, response); })
-            .catch(function (response) { return console.error("drawMemoryAbstractly error: ", response); });
-    };
-    /**
-     * 绘制抽象的虚拟内存。
-     *
-     * @param canvas 画布
-     * @param [origin] 起点
-     * @return  虚拟内存图
-     */
-    library.drawMemoryStandardly = function (canvas, origin) {
-        this.setStyle('large');
-        var common = this.plugIn.library("common");
-        canvas = canvas || common.canvas();
-        origin = origin || common.windowCenterPoint();
-        // echo '"", "代码段(.text)", "已初始化的数据(.data)", "未初始化的数据(.bss)", "堆", "", "共享库的内存映射区域", "", "用户栈", ""' | sed "1i $(seq -s ',' 0 10)" | column -t -s , -o ,
-        //  0 ,1               ,2                       ,3                  ,4    ,5  ,6                 ,7  ,8        ,9
-        var descriptions = [
-            "", "代码段(.text)", "已初始化的数据(.data)", "未初始化的数据(.bss)", "堆", "", "共享库的内存映射区域", "", "用户栈", ""
-        ];
-        var group = this.drawMemoryBlocksAbstractly(canvas, origin, descriptions);
-        var graphics = group.graphics;
-        var heapRect = graphics.find(function (graphic) { return graphic.text === "堆"; }).geometry;
-        var heapLineStartPoint = common.pointOfRect(heapRect, 'top-center');
-        var heapLineEndPoint = new Point(heapLineStartPoint.x, heapLineStartPoint.y - this.dynamic.rectSize.height);
-        var heapLine = common.drawLine(canvas, [heapLineStartPoint, heapLineEndPoint], "向上增长", true);
-        var mmapRect = graphics.find(function (graphic) { return graphic.text === "共享库的内存映射区域"; }).geometry;
-        var mmapLineStartPoint = common.pointOfRect(mmapRect, 'bottom-right').add(new Point(20, 0));
-        var mmapLineEndPoint = new Point(mmapLineStartPoint.x, mmapLineStartPoint.y + this.dynamic.rectSize.height);
-        var mmapLine = common.drawLine(canvas, [mmapLineStartPoint, mmapLineEndPoint], "malloc 向下增长", true);
-        var stackLineStartPoint = common.pointOfRect(graphics.find(function (graphic) { return graphic.text === "用户栈"; }).geometry, 'bottom-center');
-        var stackLineEndPoint = new Point(stackLineStartPoint.x, stackLineStartPoint.y + this.dynamic.rectSize.height);
-        var stackLine = common.drawLine(canvas, [stackLineStartPoint, stackLineEndPoint], "向下增长", true);
-        var brkLineEndPoint = heapRect.origin.add(new Point(this.dynamic.rectSize.width, 0));
-        var brkLineStartPoint = brkLineEndPoint.add(new Point(this.dynamic.rectSize.width / 2, 0));
-        var brkLine = common.drawLine(canvas, [brkLineStartPoint, brkLineEndPoint], "堆顶（brk 变量）");
-        var directionOffset = new Point(-this.dynamic.rectSize.width, 0);
-        var directionStartPoint = graphics[graphics.length - 1].geometry.center.add(directionOffset);
-        var directionEndPoint = graphics[0].geometry.center.add(directionOffset);
-        var directionLine = common.drawLine(canvas, [directionStartPoint, directionEndPoint], "低地址");
-        var directionEndText = canvas.addText("高地址", directionEndPoint.add(new Point(0, -20)));
-        return new Group([heapLine, mmapLine, stackLine, brkLine, directionLine, directionEndText, group]);
-    };
-    /**
-     * 绘制虚拟内存单元，抽象地。
-     *
-     * @param canvas 画布
-     * @param origin 起点，矩形左下角处位置
-     * @param {String[]} descriptions 内存块描述集合
-     * @return  虚拟内存单元图
-     */
-    library.drawMemoryBlocksAbstractly = function (canvas, origin, descriptions) {
-        var _this_1 = this;
-        var pointOperator = this.dynamic.direction === "down" ? "add" : "subtract";
-        return new Group(descriptions.map(function (description, index) {
-            if (index > 0) {
-                origin = origin[pointOperator](new Point(0, _this_1.dynamic.rectSize.height));
-            }
-            return _this_1.drawMemoryRect(canvas, origin, description);
-        }));
-    };
-    /**
-     * 绘制栈区抽象虚拟内存。案例参考：variable.stack.json。
-     *
-     * @param canvas 画布
-     * @param [origin] 起点
-     */
-    library.drawStackMemoryAbstractly = function (canvas, origin) {
-        var _this_1 = this;
-        this.setStyle("small");
-        this.dynamic.labelTextBase = 10; //为什么栈使用 10 进制，汇编中类似 16(%rip) 的偏移地址使用了 10 进制
-        this.dynamic.showSize = false;
-        var common = this.plugIn.library("common");
-        canvas = canvas || common.canvas();
-        origin = origin || common.windowCenterPoint();
-        common.readFileContentForGraphic(common.selectedGraphic() || canvas, "location-drawStackMemoryAbstractly")
-            .then(function (responce) {
-            var data = JSON.parse(responce.data);
-            var size = data.size + 8; // 从 start(=0) + step 到 size
-            _this_1.dynamic.labelTextLength = size.toString().length;
-            _this_1.dynamic.labelSize.width = 50;
-            var blocks = _this_1.buildBlocksForFrame(size);
-            blocks = _this_1.sortBlocks(blocks);
-            _this_1.setBlocksForFrame(blocks, data.blocks);
-            _this_1.drawMemoryBlocks(canvas, origin, blocks);
-        })
-            .catch(function (response) {
-            console.error("readFileContentForGraphic response: ", response);
-        });
-    };
-    /**
-     * 构建栈帧内存块集合。
-     *
-     * 汇编代码 'subq    $88, %rsp' 不一定代表栈帧空间。
-     *
-     * @param size 空间，字节数
-     * @param start 起始地址，从 0 开始，和汇编代码相匹配
-     * @param step 步调，每格字节数
-     * @return  内存块集合
-     */
-    library.buildBlocksForFrame = function (size, start, step) {
-        if (start === void 0) { start = 0; }
-        if (step === void 0) { step = 8; }
-        var count = size / step;
-        var blocks = [];
-        for (var i = 0; i < count; i++) {
-            blocks.push({ startAddress: start, endAddress: start + step });
-            start -= step;
-        }
-        return blocks;
-    };
-    /**
-     * 设置栈帧内存块集合。
-     *
-     * @param  template 模板内存块集合
-     * @param  content 内容内存块集合
-     * @param [step] 步调，每格字节数
-     */
-    library.setBlocksForFrame = function (template, content, step) {
-        if (step === void 0) { step = 8; }
-        var _loop_1 = function (contentBlock) {
-            var index = template.findIndex(function (block) { return block.startAddress === contentBlock.startAddress; });
-            if (index === -1)
-                return { value: void 0 };
-            var endAddress = contentBlock.startAddress + (contentBlock.size || step);
-            while (template[index] && template[index].endAddress <= endAddress) {
-                template[index++].description = contentBlock.description;
-            }
-        };
-        for (var _i = 0, content_1 = content; _i < content_1.length; _i++) {
-            var contentBlock = content_1[_i];
-            var state_1 = _loop_1(contentBlock);
-            if (typeof state_1 === "object")
-                return state_1.value;
-        }
-    };
-    /**
-     * 基于内存映射，绘制虚拟内存。
-     *
-     * @param canvas 画布
-     * @param [origin] 起点
-     * @param [content] 内容
-     * @param [location] 内容
-     * @return  虚拟内存图
-     */
-    library.drawMemoryForMaps = function (canvas, origin, content, location) {
-        var _this_1 = this;
-        this.setStyle('small');
-        var common = this.plugIn.library("common");
-        canvas = canvas || common.canvas();
-        origin = origin || common.windowCenterPoint();
-        // readFileContentForGraphic(canvas, "maps-location")
-        return (content ? new Promise(function (resolve) { return resolve({ data: content }); }) : common.selectFile())
-            // return (location ? common.readFileContent(location) : common.selectFile())
-            .then(function (response) {
-            var blocks = _this_1.resolveMaps(response.data);
-            blocks.unshift({ startAddress: 0n, endAddress: blocks[0].startAddress }); // 从 0 开始显示
-            blocks.push({
-                startAddress: blocks[blocks.length - 1].endAddress,
-                endAddress: bigint("0xffffffffffffffff"), // 截止到 16 个 f，数值溢出，需要使用 bigint
-            });
-            blocks = _this_1.paddingBlocks(_this_1.sortBlocks(blocks));
-            blocks = _this_1.mergeBlocks(blocks);
-            return _this_1.drawMemoryBlocks(canvas, origin, blocks);
-        })
-            .catch(function (response) {
-            console.error("selectFile response: ", response);
-        });
-    };
-    /**
-     * 解析内存映射。
-     *
-     * @param content 内存映射内容
-     * @return  内存块
-     */
-    library.resolveMaps = function (content) {
-        //1                                  2     3         4      5        6
-        //561d970c5000-561d970c6000          r--p  00000000  08:03  1581273  /usr/lib/jvm/java-17-openjdk-amd64/bin/java
-        var lines = content.split("\n");
-        return lines.filter(function (line) { return line; })
-            .map(function (line) { return line.split(/ +/); })
-            .map(function (cells) {
-            var addresses = cells[0].split("-");
-            // 16 个 f 需要使用 bigint 才能表示
-            return {
-                // startAddress: parseInt(addresses.shift(), 16),
-                startAddress: bigint(parseInt(addresses.shift(), 16)),
-                // endAddress: parseInt(addresses.shift(), 16),
-                endAddress: bigint(parseInt(addresses.shift(), 16)),
-                description: (cells[5] || "").split("/").pop() || "[anon]" //全路径太长，只取末尾的程序名
-            };
-        });
-    };
-    /**
-     * 合并相同描述的相邻内存块。此处假设相同描述的内存块是连续的。
-     *
-     * @param  blocks 内存块集合
-     * @return  内存块集合
-     */
-    library.mergeBlocks = function (blocks) {
-        for (var i = 1; i < blocks.length; i++) {
-            var prev = blocks[i - 1], curr = blocks[i];
-            if (prev.description === curr.description) {
-                prev.endAddress = curr.endAddress; // 上一块的结束地址指向当前块的结束地址
-                blocks.splice(i, 1); // 删除当前块
-                i--;
-            }
-        }
-        return blocks;
-    };
-    /**
-     * 排序内存块集合。
-     * @param  blocks 内存块集合
-     * @return  等于输入的内存块集合
-     */
-    library.sortBlocks = function (blocks) {
-        blocks.sort(function (left, right) { return left.startAddress - right.startAddress; });
-        return blocks;
-    };
-    /**
-     * 对齐内存块集合。
-     * 内存地址应该是连续的，在空缺处补齐。
-     * @param  blocks 内存块集合
-     * @return  等于输入的内存块集合
-     */
-    library.paddingBlocks = function (blocks) {
-        for (var i = 1; i < blocks.length; i++) {
-            var prev = blocks[i - 1], curr = blocks[i];
-            //地址不连续，补齐空缺
-            if (prev.endAddress < curr.startAddress) {
-                blocks.splice(i, 0, { startAddress: prev.endAddress, endAddress: curr.startAddress });
-                i++;
-            }
-        }
-        return blocks;
-    };
-    /**
-     * 绘制虚拟内存单元，从下往上绘制。
-     *
-     * @param canvas 画布
-     * @param origin 起点，矩形的左下点
-     * @param  blocks 内存块集合
-     * @return  绘制的图形
-     */
-    library.drawMemoryBlocks = function (canvas, origin, blocks) {
-        var _this_1 = this;
-        var array = blocks.map(function (block, index) {
-            // PeaceConsole.root.info(`block: ${JSON.stringify(block)}`);
-            if (index === 0)
-                return _this_1.drawMemoryBlock(canvas, origin, block);
-            origin = origin.subtract(new Point(0, _this_1.dynamic.rectSize.height));
-            var prev = blocks[index - 1], curr = blocks[index];
-            if (prev.endAddress < curr.startAddress) {
-                origin = origin.subtract(new Point(0, _this_1.dynamic.rectSize.height));
-            }
-            else if (prev.endAddress > curr.startAddress) {
-                origin = origin.add(new Point(0, _this_1.dynamic.rectSize.height / 2));
-            }
-            return _this_1.drawMemoryBlock(canvas, origin, block);
-        });
-        return new Group(array);
-    };
-    /**
-     * 绘制虚拟内存单元，从下往上绘制。
-     *
-     * @param canvas 画布
-     * @param startPoint 起点，矩形左下角处位置
-     * @param block 内存块
-     * @return  绘制的图形
-     */
-    library.drawMemoryBlock = function (canvas, startPoint, block) {
-        // PeaceConsole.root.info(`drawMemoryBlock. startPoint=${startPoint}, block=${block}`);
-        var dynamic = this.dynamic;
-        var endpoint = new Point(startPoint.x, startPoint.y - dynamic.rectSize.height);
-        var graphics = [
-            this.drawMemoryRect(canvas, endpoint, block.description),
-            this.drawMemoryAddress(canvas, startPoint, block.startAddress),
-            this.drawMemoryAddress(canvas, endpoint, block.endAddress),
-        ];
-        if (!dynamic.showSize)
-            return new Group(graphics);
-        var size = Number(block.endAddress - block.startAddress);
-        if (dynamic.sizeStyle === 'outer')
-            graphics.push(this.drawMemorySize(canvas, endpoint, size));
-        else
-            graphics[0].text += " (".concat(Common.formatMemorySize(size), ")");
-        return new Group(graphics);
-    };
-    /**
-     * 绘制内存矩形。
-     *
-     * @param canvas 画布
-     * @param location 位置
-     * @param [description] 描述
-     * @return {Shape} 绘制的图形
-     */
-    library.drawMemoryRect = function (canvas, location, description) {
-        var dynamic = this.dynamic, rectSize = dynamic.rectSize;
-        var shape = canvas.newShape();
-        shape.geometry = new Rect(location.x, location.y, rectSize.width, rectSize.height);
-        shape.shadowColor = null;
-        dynamic.rectTextSize && (shape.textSize = dynamic.rectTextSize);
-        // Color.RGB(1.0, 1.0, 0.75)
-        shape.fillColor = dynamic.rectFillColors[description || ""] || dynamic.rectFillColors["*"];
-        description && (shape.text = description);
-        //磁体、磁极：可连线的点
-        shape.magnets = [new Point(0, 0), new Point(1.00, 1.00), new Point(1.00, -1.00), new Point(-1.00, -1.00), new Point(-1.00, 1.00),];
-        return shape;
-    };
-    /**
-     * 绘制虚拟内存单元地址。
-     *
-     * @param canvas 画布
-     * @param origin 起点
-     * @param {Number|bigint} address 地址
-     * @return 绘制的图形
-     */
-    library.drawMemoryAddress = function (canvas, origin, address) {
-        var line = canvas.newLine();
-        line.shadowColor = null;
-        var lineStartPoint = origin;
-        var lineEndPoint = new Point(lineStartPoint.x - this.dynamic.lineWidth, lineStartPoint.y);
-        line.points = [lineStartPoint, lineEndPoint];
-        var label = canvas.newShape();
-        label.geometry = new Rect(lineEndPoint.x - this.dynamic.labelSize.width, lineEndPoint.y - this.dynamic.labelSize.height / 2, this.dynamic.labelSize.width, this.dynamic.labelSize.height);
-        label.shadowColor = null;
-        label.strokeThickness = 0;
-        label.text = this.formatMemoryAddress(address);
-        label.textSize = 12;
-        label.fillColor = null;
-        label.textHorizontalAlignment = HorizontalTextAlignment.Right;
-        return new Group([line, label]);
-    };
-    /**
-     * 格式化内存地址。
-     *
-     * PlugIn.find('com.github.peacetrue.learn.graffle').library('memory').formatMemoryAddress(bigint("0xffffffffffffffff"))
-     *
-     * @param {Number|bigint} address 内存地址
-     * @return  内存地址描述
-     */
-    library.formatMemoryAddress = function (address) {
-        var dynamic = this.dynamic;
-        var text = address < 0 ? '-' : ' '; //符号位
-        if (dynamic.labelTextBase === 16)
-            text += '0x'; //16 进制标志
-        var absAddress = address > 0 ? address : -address;
-        return text + absAddress.toString(dynamic.labelTextBase).leftPad(dynamic.labelTextLength, '0');
-    };
-    /**
-     * 绘制内存空间尺寸。
-     *
-     * @param canvas 画布
-     * @param location 位置
-     * @param size 空间尺寸
-     * @return 绘制的图形
-     */
-    library.drawMemorySize = function (canvas, location, size) {
-        var dynamic = this.dynamic;
-        var upLine = canvas.newLine();
-        upLine.shadowColor = null;
-        var upLineStartPoint = new Point(location.x - dynamic.lineWidth - dynamic.labelSize.width / 2, location.y + dynamic.labelSize.height / 2);
-        var upLineEndPoint = new Point(upLineStartPoint.x, upLineStartPoint.y + dynamic.rectSize.height / 2 - dynamic.labelSize.height);
-        upLine.points = [upLineStartPoint, upLineEndPoint];
-        upLine.headType = "FilledArrow";
-        var label = canvas.newShape();
-        label.geometry = new Rect(upLineStartPoint.x - dynamic.labelSize.width / 2, upLineEndPoint.y, dynamic.labelSize.width, dynamic.labelSize.height);
-        label.shadowColor = null;
-        label.strokeThickness = 0;
-        label.text = Common.formatMemorySize(size);
-        label.textSize = 12;
-        label.fillColor = null;
-        label.textHorizontalAlignment = HorizontalTextAlignment.Center;
-        var bottomLine = canvas.newLine();
-        bottomLine.shadowColor = null;
-        var bottomLineStartPoint = new Point(upLineStartPoint.x, location.y + dynamic.rectSize.height - dynamic.labelSize.height / 2);
-        var bottomLineEndPoint = new Point(bottomLineStartPoint.x, bottomLineStartPoint.y - dynamic.rectSize.height / 2 + dynamic.labelSize.height);
-        bottomLine.points = [bottomLineStartPoint, bottomLineEndPoint];
-        bottomLine.headType = "FilledArrow";
-        return new Group([upLine, label, bottomLine]);
-    };
+    //   return this.promiseUrlFetch(this.plugIn.resourceNamed(path))
+    //     .then(response => {
+    //       let content = response.data;
+    //       console.info(`lib '${path}': \n`, content);
+    //       eval(content);
+    //       eval(`Object[name] = ${name}`);
+    //       return Object[name];
+    //     });
+    // }
+    // Logger.proxy(Common.name, _this);
     return library;
 })();

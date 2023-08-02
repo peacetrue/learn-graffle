@@ -3,7 +3,7 @@
     let action = new PlugIn.Action(function (selection) {
         let graphic = selection.graphics[0];
         console.info("graphic: ", graphic);
-        let library = this.plugIn.library("memory");
+        let library = this.plugIn.library("common");
         let data = library.extractGraphicTexts(graphic);
         let location = graphic.userData["location"];
         // if (location) return URL.fromString(`file://${location}`);
