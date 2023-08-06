@@ -17,10 +17,14 @@ class Logger {
   /** 日志配置，不同的类和方法使用不同的日志级别 */
   public static config: Record<string, LoggerLevel> = {
     [Logger.CATEGORY_ROOT]: LoggerLevel.DEBUG,
+    "Common.canvas": LoggerLevel.WARN,
+    "Common.selection": LoggerLevel.WARN,
+    "Common.windowCenterPoint": LoggerLevel.WARN,
     "Common": LoggerLevel.DEBUG,
     "MemoryPainter.incrementOrigin": LoggerLevel.WARN,
     "MemoryPainter.subtract": LoggerLevel.WARN,
     "MemoryPainter.getDirectionHandler": LoggerLevel.WARN,
+    "EntityProperty.parse": LoggerLevel.WARN,
   };
   /** 日志缓存，category 为 key */
   public static loggers: Record<string, Logger> = {};
@@ -79,6 +83,8 @@ class Logger {
     let indent = "  ".repeat(Logger.functionHierarchy);
     levelName = levelName.toLowerCase();
     Logger.log(`Logger.log: levelName=${levelName}, levelName in console=`, levelName in console);
+    // console.info(BigInt(1)) 导致程序异常退出
+    args.forEach((value, index) => typeof value === "bigint" && (args[index] = value.toString()))
     console[levelName in console ? levelName : "info"](`[${formattedLevelName}]`, indent, ...args);
   }
 
@@ -165,23 +171,28 @@ class Logger {
         Logger.functionCategory = name;
         Logger.functionHierarchy++;
         logger.info(`${name}(arguments ${argumentsList.length})`);
-        argumentsList.forEach((argument, index) => logger.debug(`[${index}]: ${argument}`));
+        argumentsList.forEach((argument, index) => logger.debug(`[${index}]: ${Logger.formatArray(argument)}`));
         let result = target.apply(thisArg, argumentsList);
-        logger.debug(`${name}(result): `, typeof result === "string" ? `'${result}'` : result);
+        logger.debug(`${name}(result): `, typeof result === "string" ? `'${result}'` : Logger.formatArray(result));
         Logger.functionHierarchy--;
         return result;
       }
     });
+  }
+
+  static formatArray(argument: any) {
+    return argument instanceof Array ? ('array[' + argument.length + ']') : argument;
   }
 }
 
 
 class Common {
 
-  /** 上下左右中 5 个磁极 */
-  public static magnets_5 = [new Point(0, 0),
-    new Point(1.00, 1.00), new Point(1.00, -1.00),
-    new Point(-1.00, -1.00), new Point(-1.00, 1.00),
+  /**  9 个磁极，9 宫格 */
+  public static magnets_6 = [
+    new Point(-1.00, -1.00), new Point(-1.00, 0), new Point(-1.00, 1.00),
+    new Point(0, -1.00), new Point(0, 0), new Point(0, 1.00),
+    new Point(1.00, -1.00), new Point(1.00, 0), new Point(1.00, 1.00),
   ];
   /** 保存各 canvas 的配置，以 canvas.name 为 key */
   public static canvasOptions = {};
@@ -351,8 +362,6 @@ class Common {
    * @param [length] 图形数目
    */
   public static loadGraphicsText(graphics: Solid[], locationKey: string, length?: number) {
-
-
     let graphic = graphics[0];
     length = length || graphic.userData['length'] || 1;
     return this.readFileContentAssociatively(graphic, locationKey)
@@ -441,28 +450,30 @@ class Common {
   /**
    * 清除图形内的文本。
    *
-   * @param graphics  图形
+   * @param graphics 图形
    */
-  public static clearGraphicsText(graphics) {
+  public static clearGraphicsText(graphics: Graphic | Graphic[]) {
     if (graphics instanceof Array) {
-      return graphics.forEach(graphic => this.clearGraphicsText(graphic));
+      graphics.forEach(graphic => this.clearGraphicsText(graphic));
+      return;
     }
 
     if (graphics instanceof Group) {
       graphics.graphics.forEach(graphic => this.clearGraphicsText(graphic))
     } else {
-      graphics.strokeType && (graphics.text = "");
+      // 带边框的图形
+      graphics instanceof Solid && graphics.strokeType && (graphics.text = "");
     }
   }
 
   /**
    * 获取矩形指定位置处的点。方位顺序：上下左右，top-left。
    *
-   * @param {Rect} rect 矩形
+   * @param rect 矩形
    * @param location 位置，top、middle、bottom、left、center、right
    * @return 点
    */
-  public static pointOfRect(rect, location) {
+  public static pointOfRect(rect: Rect, location: string) {
     let parts = location.split('-');
     let vertical = parts.shift(), horizontal = parts.shift();
     let offsetWidth = 0;
@@ -479,7 +490,7 @@ class Common {
    *
    * PlugIn.find('com.github.peacetrue.learn.graffle').library('common').pointsOfRect();
    *
-   * @param {Rect} rect 矩形
+   * @param rect 矩形
    * @return {Point[]} 点集合
    */
   public static pointsOfRect(rect) {
@@ -601,9 +612,7 @@ class Common {
     }
   }
 
-  /**
-   * 定位到选中图形所在位置。
-   */
+  /** 定位到选中图形所在位置 */
   public static locateCenter() {
     let window = document.windows[0];
     let selection = window.selection;
@@ -619,9 +628,7 @@ class Common {
    * @param target 目标图形集合
    */
   public static addConnected(source, target) {
-
     if (!source) return;
-
     if (source instanceof Array) {
       source.forEach(item => this.addConnected(item, target));
     } else {
@@ -640,10 +647,8 @@ class Common {
    * @param graphics 图形集合
    */
   public static highlightConnected(graphics) {
-
     let target = [];
     this.addConnected(graphics, target);
-
     document.windows[0].selection.view.select(target, false);
   }
 
@@ -658,19 +663,17 @@ class Common {
     });
   }
 
-  public static plugIn: PlugIn;
   // library.plugIn.resourceNamed("libs/logger.js").fetch(response => eval(response.toString()));
   // 反例：其他类库未完成初始化时，不能获取当前类库
   // 正例：library.plugIn.resourceNamed("logger.js").fetch(response => eval(response.toString()));
   // eval 时需要注意绑定的对象
-  public static loadClass(name, path = `libs/${name}.js`) {
+  public static loadClass(plugIn: PlugIn, name, path = `libs/${name}.js`) {
     if (name in Object) {
       return new Promise((resolve, reject) => resolve(Object[name]))
     }
-    return this.promiseUrlFetch(this.plugIn.resourceNamed(path))
+    return this.promiseUrlFetch(plugIn.resourceNamed(path))
       .then(response => {
         let content = response.data;
-
         eval(content);
         eval(`Object[name] = ${name}`);
         return Object[name];
@@ -752,15 +755,19 @@ class Common {
     return new Point(size.width, size.height);
   }
 
-  public static test() {
-
+  public static invokeCachely<K extends string, V>(cache: Record<K, V>, key: K, invoker: (key: K) => V) {
+    let value = cache[key];
+    if (value) return value;
+    value = invoker(key);
+    cache[key] = value;
+    return value;
   }
 
 }
 
 /**
- * 枚举，key 为名称，value 为索引
- * 示例：{0: "BOTTOM_UP", 1: "LEFT_RIGHT", 2: "RIGHT_LEFT", BOTTOM_UP: 0, LEFT_RIGHT: 1, RIGHT_LEFT: 2}
+ * 枚举，key 为名称，value 为索引，即针对后 3 项
+ * MemoryDirection：{0: "BOTTOM_UP", 1: "LEFT_RIGHT", 2: "RIGHT_LEFT", BOTTOM_UP: 0, LEFT_RIGHT: 1, RIGHT_LEFT: 2}
  */
 class Enum {
   public static view(enums: Record<string | number, number | string>) {
@@ -770,11 +777,19 @@ class Enum {
     console.info("values: ", values);
   }
 
+  /**
+   * 获取 键 集合，键是枚举名称。
+   * Object.keys(MemoryDirection)：0,1,2,3,LEFT_RIGHT,RIGHT_LEFT,UP_BOTTOM,BOTTOM_UP
+   */
   public static keys(enums: Record<string | number, number | string>) {
     let keys = Object.keys(enums);
     return keys.slice(keys.length / 2);
   }
 
+  /**
+   * 获取 值 集合，值是枚举索引
+   * Object.values(MemoryDirection)：LEFT_RIGHT,RIGHT_LEFT,UP_BOTTOM,BOTTOM_UP,0,1,2,3
+   */
   public static values(enums: Record<string | number, number | string>) {
     let keys = Object.values(enums);
     return keys.slice(keys.length / 2) as number[];
@@ -1294,11 +1309,7 @@ class PeaceTable {
     this.cellFillColor = PeaceTable.cellFillColors[text || ""] || PeaceTable.cellFillColors["*"];
     this.cellFillColor && (shape.fillColor = this.cellFillColor);
     text && (shape.text = text);
-    // 5 个磁极：中上下左右
-    shape.magnets = [new Point(0, 0),
-      new Point(1.00, 1.00), new Point(1.00, -1.00),
-      new Point(-1.00, -1.00), new Point(-1.00, 1.00),
-    ];
+    shape.magnets = Common.magnets_6;
     return shape;
   }
 
@@ -1342,34 +1353,198 @@ class PeaceTable {
   }
 }
 
+class ClassDiagram {
+
+  public entities: Entity[];
+  public entry?: string; //入口类名
+
+  public static parse(content: Partial<ClassDiagram>) {
+    let classDiagram = Object.assign(new ClassDiagram(), content);
+    classDiagram.entities = content.entities.map(item => Entity.parse(item));
+    return classDiagram;
+  }
+
+  // public toString() {
+  //   return JSON.stringify({...this, entities: this.entities?.length});
+  // }
+}
+
+class Entity {
+  public name: string;
+  public properties: EntityProperty[];
+
+  public static parse(content: Partial<Entity>) {
+    let entity = Object.assign(new Entity(), content);
+    entity.properties = content.properties.map(item => EntityProperty.parse(item));
+    return entity;
+  }
+
+  public toString() {
+    return JSON.stringify({...this, properties: this.properties?.length});
+  }
+}
+
+class EntityProperty {
+  public entity?: Entity;
+  public type: string;
+  public name: string;
+  public ref?: string;
+
+  public static parse(content: Partial<EntityProperty>) {
+    return Object.assign(new EntityProperty(), content);
+  }
+
+  public toString() {
+    return JSON.stringify({...this, entity: this.entity?.name});
+  }
+}
+
+class Instance {
+  public type: string;
+  public properties: InstanceProperty[];
+
+  public static parse(content: Partial<Instance>) {
+    let entity = Object.assign(new Instance(), content);
+    entity.properties = content.properties.map(item => InstanceProperty.parse({...item, instance: entity}));
+    return entity;
+  }
+
+  public toString() {
+    return JSON.stringify({...this, properties: this.properties?.length});
+  }
+}
+
+class InstanceProperty {
+  public instance?: Instance;
+  public name: string;
+  public value: string;
+
+  public static parse(content: Partial<InstanceProperty>) {
+    return Object.assign(new InstanceProperty(), content);
+  }
+
+  public toString() {
+    return JSON.stringify({...this, instance: this.instance?.type});
+  }
+}
+
+class ClassDiagramPainter {
+
+  public static locationKey: string = ClassDiagramPainter.name;
+  public static defaults: ClassDiagramPainter = Logger.proxyInstance(new ClassDiagramPainter());
+  public table: PeaceTable = PeaceTable.small;
+  public offset: Size = new Size(100, 100);
+
+  /** 插件入口 */
+  public static draw(canvas: Canvas = Common.canvas(), origin: Point = Common.windowCenterPoint()) {
+    return this.defaults.drawInteractively(canvas, origin);
+  }
+
+  /** 脚本入口 */
+  public static drawScript(content: Record<string, any>) {
+    return this.defaults.draw(Common.canvas(), Common.windowCenterPoint(), ClassDiagram.parse(content));
+  }
+
+  public drawInteractively(canvas: Canvas, origin: Point) {
+    return Common.readFileContentAssociatively(canvas, ClassDiagramPainter.locationKey)
+      .then(response => {
+        return this.draw(canvas, origin, ClassDiagram.parse(JSON.parse(response.data)));
+      })
+      .catch(response => Logger.getLogger().error(response));
+  }
+
+  private static entities: Entity[] = [];
+  private static entityGraphics: Record<string, Group> = {};
+
+  public static resetCache(entities: Entity[]) {
+    ClassDiagramPainter.entities = entities;
+    ClassDiagramPainter.entityGraphics = {};
+  }
+
+  public static invokeCachely(key: string, invoker: (key: string) => Group) {
+    return Common.invokeCachely(ClassDiagramPainter.entityGraphics, key, invoker);
+  }
+
+  public draw(canvas: Canvas, origin: Point, classDiagram: ClassDiagram) {
+    ClassDiagramPainter.resetCache(classDiagram.entities);
+    // 水平方法绘制实体类
+    let increase: Point = new Point(this.table.cellSize.width + this.offset.width, 0);
+    // let increase: Point = new Point(0, this.table.cellSize.height + this.offset.height);
+    let entities = classDiagram.entities;
+    if (classDiagram.entry) entities = classDiagram.entities.filter(item => item.name == classDiagram.entry);
+    return entities.map((entity, index) => {
+      return ClassDiagramPainter.invokeCachely(entity.name, () => {
+        origin = index === 0 ? origin : origin.add(increase);
+        return this.drawEntity(canvas, origin, entity);
+      });
+    });
+  }
+
+
+  public drawEntity(canvas: Canvas, origin: Point, entity: Entity) {
+    let increase: Point = new Point(0, this.table.cellSize.height);
+    let header = this.drawHeader(canvas, origin, entity.name);
+    let properties = entity.properties.map((property, index) => {
+      return this.drawProperty(canvas, origin = origin.add(increase), property);
+    });
+    return new Group([header, ...properties]);
+  }
+
+  public drawHeader(canvas: Canvas, origin: Point, name) {
+    let header = this.table.drawCell(canvas, origin, name);
+    Common.bolder(header);
+    return header;
+  }
+
+  public drawProperty(canvas: Canvas, origin: Point, property: EntityProperty) {
+    let cell = this.table.drawCell(canvas, origin, `${property.type}:${property.name}`);
+    cell.textHorizontalAlignment = HorizontalTextAlignment.Left;
+    this.drawPropertyRef(canvas, origin, cell, property);
+    return cell;
+  }
+
+  public drawPropertyRef(canvas: Canvas, origin: Point, propertyCell: Shape, property: EntityProperty) {
+    if (!property.ref) return;
+    let entity = ClassDiagramPainter.entities.find(item => item.name == property.ref);
+    if (!entity) return;
+    origin = origin.add(new Point(this.table.cellSize.width + this.offset.width, 0));
+    let entityGroup = ClassDiagramPainter.invokeCachely(entity.name, () => this.drawEntity(canvas, origin, entity));
+    let entityHeader = entityGroup.graphics[entityGroup.graphics.length - 1];
+    let line = canvas.connect(propertyCell, entityHeader);
+    line.lineType = LineType.Orthogonal; // 直角
+    line.tailMagnet = 8; // 磁极索引从 1 开始，逆时针转动
+    line.headType = "FilledArrow";
+    line.headMagnet = 2;
+  }
+
+}
+
 /** 内存 */
 class Memory {
 
   public title: string;//标题
   public blocks: MemoryBlock[] = [];//内存块集合
 
-  public static instance(title: string, blocks: MemoryBlock[]) {
-    let memory = new Memory();
-    memory.title = title;
-    memory.blocks = blocks;
-    return memory;
+  public static instance(content: Partial<Memory>) {
+    return Object.assign(new Memory(), content);
   }
 
   /** 解析内存数据 */
-  public static parse(data: Record<string, any> | Record<string, any>[]) {
-    if (data instanceof Array) {
-      return this.instance(null, MemoryBlock.parse(data));
-    }
-    return this.instance(data["title"], MemoryBlock.parse(data["blocks"]))
+  public static parseJson(content: string) {
+    return this.instance({blocks: MemoryBlock.parseJson(content)});
   }
 
   public static parseMaps(content: string): Memory {
-    return this.instance(null, MemoryBlock.parseMaps(content));
+    return this.instance({blocks: MemoryBlock.parseMaps(content)});
   }
 
-  public toString() {
-    return JSON.stringify(this);
+  public static parseFrames(content: string): Memory {
+    return this.instance({blocks: MemoryBlock.parseFrames(content)});
   }
+
+  // public toString() {
+  //   return JSON.stringify({...this, blocks: `[${this.blocks?.length}]`});
+  // }
 
 
 }
@@ -1388,8 +1563,72 @@ class MemoryBlock {
   }
 
   /** 实例化 */
-  public static instance(object: Partial<Record<keyof MemoryBlock, any>>): MemoryBlock {
+  public static instance(object: Partial<MemoryBlock>): MemoryBlock {
     return Object.assign(new MemoryBlock(undefined, undefined, undefined), object);
+  }
+
+  public static parse(content: string | Record<string, any>[], type: string): MemoryBlock[] {
+    switch (type) {
+      case "maps":
+        return this.parseMaps(content as string);
+      case "frames":
+        return this.parseFrames(content as string);
+      case "json":
+        return this.parseJson(content as string);
+      default:
+        return this.parseRaw(content as Record<string, any>[]);
+    }
+  }
+
+  /** 从 json 字符串解析 */
+  public static parseJson(content: string): MemoryBlock[] {
+    return this.parseRaw(JSON.parse(content));
+  }
+
+  public static parseRaw(content: Record<string, any>[]): MemoryBlock[] {
+    return content.map(item => this.instance(item));
+  }
+
+  /** 解析内存映射，升序排列。linux 下 /proc/<pid>/maps 内容 */
+  public static parseMaps(content: string): MemoryBlock[] {
+    //1                                  2     3         4      5        6
+    //561d970c5000-561d970c6000          r--p  00000000  08:03  1581273  /usr/lib/jvm/java-17-openjdk-amd64/bin/java
+    let lines = content.split("\n");
+    let blocks = lines
+      .filter(line => line.trim())   // 删除空行
+      .map(line => line.split(/ +/)) // 按空格分割
+      .map(cells => {
+        let addresses = cells[0].split("-");
+        // 16 个 f 需要使用 bigint 才能表示
+        return new MemoryBlock(
+          BigInt(parseInt(addresses[0], 16)),
+          BigInt(parseInt(addresses[1], 16)),
+          (cells[5] || "").split("/").pop() || "[anon]",//全路径太长，只取末尾的程序名
+        )
+      });
+    // 填充顶部
+    blocks.unshift(new MemoryBlock(BigInt(0), blocks[0].startAddress));// 从 0 开始显示
+    // 填充尾部
+    blocks.push(new MemoryBlock(
+      blocks[blocks.length - 1].endAddress,// bigint 和 bigint 才能相减求 size
+      BigInt("0xffffffffffffffff"),// 截止到 16 个 f，数值溢出，需要使用 bigint
+    ));
+    this.merge(blocks);
+    return blocks;
+  }
+
+  /** 解析栈帧信息，升序排列 */
+  public static parseFrames(content: string): MemoryBlock[] {
+    // * thread #1, name = 'thread.bin'
+    //   * {"startAddress": "0x00007fffffffdf70", "endAddress": "0x00007fffffffe050", "description": "libc.so.6`__GI___futex_abstimed_wait_cancelable64" }
+    let lines = content.split("\n").filter(item => item.trim());
+    lines = Array.from(new Set(lines)); // 除重
+    return lines.map(line => line.substr(line.indexOf("*") + 1))
+      .map(item => JSON.parse(item))
+      .map(item => new MemoryBlock(parseInt(item.startAddress, 16), parseInt(item.endAddress, 16), item.description))
+      // 过滤掉 {"startAddress": "0x00007fffffffe1b0", "endAddress": "0x0000000000000000", "description": "thread.bin`_start" }
+      .filter(item => item.endAddress > item.startAddress)
+      ;
   }
 
 
@@ -1410,10 +1649,6 @@ class MemoryBlock {
     return Number(BigInt(left) - BigInt(right));
   }
 
-  /** 将记录转换为内存块对象 */
-  public static parse(object: Partial<Record<keyof MemoryBlock, any>>[]): MemoryBlock[] {
-    return object.map(item => this.instance(item));
-  }
 
   /** 按内存地址升序排列 */
   public static ascend(blocks: MemoryBlock[]) {
@@ -1466,33 +1701,6 @@ class MemoryBlock {
     }
   }
 
-  /** 解析内存映射，升序排列。linux 下 /proc/<pid>/maps 内容 */
-  public static parseMaps(content: string): MemoryBlock[] {
-    //1                                  2     3         4      5        6
-    //561d970c5000-561d970c6000          r--p  00000000  08:03  1581273  /usr/lib/jvm/java-17-openjdk-amd64/bin/java
-    let lines = content.split("\n");
-    let blocks = lines
-      .filter(line => line.trim())   // 删除空行
-      .map(line => line.split(/ +/)) // 按空格分割
-      .map(cells => {
-        let addresses = cells[0].split("-");
-        // 16 个 f 需要使用 bigint 才能表示
-        return new MemoryBlock(
-          BigInt(parseInt(addresses[0], 16)),
-          BigInt(parseInt(addresses[1], 16)),
-          (cells[5] || "").split("/").pop() || "[anon]",//全路径太长，只取末尾的程序名
-        )
-      });
-    // 填充顶部
-    blocks.unshift(new MemoryBlock(BigInt(0), blocks[0].startAddress));// 从 0 开始显示
-    // 填充尾部
-    blocks.push(new MemoryBlock(
-      blocks[blocks.length - 1].endAddress,// bigint 和 bigint 才能相减求 size
-      BigInt("0xffffffffffffffff"),// 截止到 16 个 f，数值溢出，需要使用 bigint
-    ));
-    this.merge(blocks);
-    return blocks;
-  }
 
 }
 
@@ -1761,7 +1969,6 @@ class MemoryPainter {
   public static modeKey: string = "mode";
   /** 绘制模式-默认值*/
   public static modeValue: number = MemoryDirection.BOTTOM_UP;
-
   public static drawMemoryLocationKey = "drawMemoryLocation";
 
 
@@ -1770,7 +1977,6 @@ class MemoryPainter {
    *
    * @param canvas 画布
    * @param origin 起点
-   * @param [content] 内容
    * @return 虚拟内存图
    */
   public static drawMemory(canvas: Canvas = Common.canvas(), origin: Point = Common.windowCenterPoint()) {
@@ -1797,6 +2003,16 @@ class MemoryPainter {
     return memory.drawMemoryInteractively(canvas, origin);
   }
 
+  public static drawScript({
+                             direction = MemoryDirection[MemoryDirection.BOTTOM_UP],
+                             type = "json",
+                             content
+                           }: Record<string, any>) {
+    return (this[direction] as MemoryPainter).drawMemoryBlocks(
+      Common.canvas(), Common.windowCenterPoint(), MemoryBlock.parse(content, type)
+    );
+  }
+
   /**
    * 交互式地绘制虚拟内存。
    *
@@ -1808,10 +2024,15 @@ class MemoryPainter {
   public drawMemoryInteractively(canvas: Canvas = Common.canvas(), origin: Point = Common.windowCenterPoint(), content?: string) {
     return Common.readFileContentSelectively(canvas, MemoryPainter.drawMemoryLocationKey, content)
       .then(response => {
-        if (response.url && response.url.toString().endsWith(".maps")) {
-          return Memory.parseMaps(response.data);
+        if (response.url) {
+          if (response.url.toString().endsWith(".maps")) {
+            return Memory.parseMaps(response.data);
+          }
+          if (response.url.toString().endsWith(".frames")) {
+            return Memory.parseFrames(response.data);
+          }
         }
-        return Memory.parse(JSON.parse(response.data));
+        return Memory.parseJson(JSON.parse(response.data));
       })
       .then(response => this.drawMemory(canvas, origin, response))
       .catch(response => Logger.getLogger().error(response));
@@ -1840,8 +2061,8 @@ class MemoryPainter {
    *
    * @param canvas 画布
    * @param origin 起点，矩形的左下点
-   * @param  blocks 内存块集合
-   * @return  绘制的图形
+   * @param blocks 内存块集合
+   * @return 绘制的图形
    */
   public drawMemoryBlocks(canvas: Canvas, origin: Point, blocks: MemoryBlock[]) {
     this.getDirectionHandler().order(blocks);
@@ -1859,7 +2080,6 @@ class MemoryPainter {
     });
     return new Group(array);
   }
-
 
   /**
    * 绘制虚拟内存单元，从下往上绘制。
@@ -1903,7 +2123,7 @@ class MemoryPainter {
     let formattedAddress = this.formatMemoryAddress(address);
     let labelOrigin = this.getDirectionHandler().getAddressLabelOrigin(this, line.points[1]);
     let label = canvas.addText(formattedAddress, labelOrigin);
-    label.magnets = Common.magnets_5;
+    label.magnets = Common.magnets_6;
     this.table.cellTextSize && (label.textSize = this.table.cellTextSize);
     return new Group([line, label]);
   }
@@ -1965,10 +2185,14 @@ var _this = (function () {return this;})();
 //@formatter:on
 (() => {
   let library = new PlugIn.Library(new Version("0.1"));
-  [Common, Memory, MemoryBlock, MemoryPainter, Stepper, LayerSwitcher].forEach(item => {
-    library[item.name] = item;
-    Logger.proxyClassStaticFunction(item);
-  });
+  [Common,
+    Memory, MemoryBlock, MemoryPainter,
+    ClassDiagram, Entity, EntityProperty, ClassDiagramPainter,
+    Stepper, LayerSwitcher]
+    .forEach(item => {
+      library[item.name] = item;
+      Logger.proxyClassStaticFunction(item);
+    });
   // library.plugIn.resourceNamed("libs/logger.js").fetch(response => eval(response.toString()));
   // 反例：其他类库未完成初始化时，不能获取当前类库
   // 正例：library.plugIn.resourceNamed("logger.js").fetch(response => eval(response.toString()));

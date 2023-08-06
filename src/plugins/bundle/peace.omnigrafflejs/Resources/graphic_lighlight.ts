@@ -3,7 +3,7 @@
     let that: PlugIn.Action = this;
     let library = that.plugIn.library("common");
     let _Common: typeof Common = library["Common"];
-    _Common.setGraphicLineNumber(selection.solids[0]);
+    _Common.highlightConnected(selection.graphics);
   });
   action.validate = function (selection: Selection) {
     return selection && selection.solids.length > 0;

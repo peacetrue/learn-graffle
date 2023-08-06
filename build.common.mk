@@ -20,6 +20,3 @@ rm/%:; rm -r$(if $(filter $(build)%,$*),f,) $*
 rm: rm/$(BUILD);
 clean: rm;
 clean/%: rm/$(BUILD)/%;
-
-#测试上述规则
-build.common.case: $(BUILD) $(BUILD)/test clean/test clean rm/empty

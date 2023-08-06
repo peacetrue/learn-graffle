@@ -6,55 +6,44 @@
   "actions": [
     {
       "image": "images/icon.png",
-      "identifier": "stepper_switch"
+      "identifier": "graphic_locate"
     },
     {
-      "image": "icon.png",
-      "identifier": "table_extract"
-    },
-    {
-      "image": "icon.png",
-      "identifier": "table_draw"
-    },
-    {
-      "image": "icon.png",
-      "identifier": "entity_draw"
-    },
-    {
-      "image": "icon.png",
-      "identifier": "memory_draw"
-    },
-    {
-      "image": "icon.png",
-      "identifier": "text_load"
-    },
-    {
-      "image": "icon.png",
-      "identifier": "text_clear"
-    },
-    {
-      "image": "icon.png",
-      "identifier": "location_center"
-    },
-    {
-      "image": "icon.png",
-      "identifier": "layer_switch"
-    },
-    {
-      "image": "icon.png",
+      "image": "images/icon.png",
       "identifier": "graphic_lighlight"
     },
     {
-      "image": "icon.png",
+      "image": "images/icon.png",
       "identifier": "graphic_line_number"
+    },
+    {
+      "image": "images/icon.png",
+      "identifier": "text_load"
+    },
+    {
+      "image": "images/icon.png",
+      "identifier": "text_clear"
+    },
+    {
+      "image": "images/icon.png",
+      "identifier": "table_extract"
+    },
+    {
+      "image": "images/icon.png",
+      "identifier": "memory_draw"
+    },
+    {
+      "image": "images/icon.png",
+      "identifier": "stepper_switch"
+    },
+    {
+      "image": "images/icon.png",
+      "identifier": "layer_switch"
     }
   ],
   "libraries": [
     {
       "identifier": "common"
-    },
-    {
-      "identifier": "entity"
     }
   ],
   "defaultLocale": "en"

@@ -1,0 +1,115 @@
+[
+  "ClassDiagramPainter",
+  {
+    "entities": [
+      {
+        "name": "CONSTANT_InvokeDynamic_info",
+        "properties": [
+          {
+            "type": "u1",
+            "name": "tag"
+          },
+          {
+            "type": "u2",
+            "name": "bootstrap_method_attr_index"
+          },
+          {
+            "type": "u2",
+            "name": "name_and_type_index"
+          }
+        ]
+      },
+      {
+        "name": "CONSTANT_NameAndType_info",
+        "properties": [
+          {
+            "type": "u1",
+            "name": "tag"
+          },
+          {
+            "type": "u2",
+            "name": "name_index"
+          },
+          {
+            "type": "u2",
+            "name": "descriptor_index"
+          }
+        ]
+      },
+      {
+        "name": "CONSTANT_Utf8_info",
+        "properties": [
+          {
+            "type": "u1",
+            "name": "tag"
+          },
+          {
+            "type": "u2",
+            "name": "length"
+          },
+          {
+            "type": "u1",
+            "name": "bytes[length]"
+          }
+        ]
+      },
+      {
+        "name": "BootstrapMethods_attribute",
+        "properties": [
+          {
+            "type": "u2",
+            "name": "attribute_name_index",
+            "ref": "CONSTANT_Utf8_info"
+          },
+          {
+            "type": "u4",
+            "name": "attribute_length"
+          },
+          {
+            "type": "u2",
+            "name": "num_bootstrap_methods"
+          },
+          {
+            "type": "u2",
+            "name": "bootstrap_methods[num_bootstrap_methods]"
+          }
+        ]
+      },
+      {
+        "name": "bootstrap_method",
+        "properties": [
+          {
+            "type": "u2",
+            "name": "bootstrap_method_ref",
+            "ref": "CONSTANT_MethodHandle_info"
+          },
+          {
+            "type": "u2",
+            "name": "num_bootstrap_arguments"
+          },
+          {
+            "type": "u2",
+            "name": "bootstrap_arguments[num_bootstrap_arguments]"
+          }
+        ]
+      },
+      {
+        "name": "CONSTANT_MethodHandle_info",
+        "properties": [
+          {
+            "type": "u1",
+            "name": "tag"
+          },
+          {
+            "type": "u1",
+            "name": "reference_kind"
+          },
+          {
+            "type": "u2",
+            "name": "reference_index"
+          }
+        ]
+      }
+    ]
+  }
+]

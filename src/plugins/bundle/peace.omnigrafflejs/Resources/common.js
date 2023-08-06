@@ -13,6 +13,17 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
+var __assign = (this && this.__assign) || function () {
+    __assign = Object.assign || function(t) {
+        for (var s, i = 1, n = arguments.length; i < n; i++) {
+            s = arguments[i];
+            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
+                t[p] = s[p];
+        }
+        return t;
+    };
+    return __assign.apply(this, arguments);
+};
 var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
     if (pack || arguments.length === 2) for (var i = 0, l = from.length, ar; i < l; i++) {
         if (ar || !(i in from)) {
@@ -85,6 +96,8 @@ var Logger = /** @class */ (function () {
         var indent = "  ".repeat(Logger.functionHierarchy);
         levelName = levelName.toLowerCase();
         Logger.log("Logger.log: levelName=".concat(levelName, ", levelName in console="), levelName in console);
+        // console.info(BigInt(1)) 导致程序异常退出
+        args.forEach(function (value, index) { return typeof value === "bigint" && (args[index] = value.toString()); });
         console[levelName in console ? levelName : "info"].apply(console, __spreadArray(["[".concat(formattedLevelName, "]"), indent], args, false));
     };
     Logger.leftPad = function (src, length, paddingChar) {
@@ -178,13 +191,16 @@ var Logger = /** @class */ (function () {
                 Logger.functionCategory = name;
                 Logger.functionHierarchy++;
                 logger.info("".concat(name, "(arguments ").concat(argumentsList.length, ")"));
-                argumentsList.forEach(function (argument, index) { return logger.debug("[".concat(index, "]: ").concat(argument)); });
+                argumentsList.forEach(function (argument, index) { return logger.debug("[".concat(index, "]: ").concat(Logger.formatArray(argument))); });
                 var result = target.apply(thisArg, argumentsList);
-                logger.debug("".concat(name, "(result): "), typeof result === "string" ? "'".concat(result, "'") : result);
+                logger.debug("".concat(name, "(result): "), typeof result === "string" ? "'".concat(result, "'") : Logger.formatArray(result));
                 Logger.functionHierarchy--;
                 return result;
             }
         });
+    };
+    Logger.formatArray = function (argument) {
+        return argument instanceof Array ? ('array[' + argument.length + ']') : argument;
     };
     /** 是否启用内部日志，仅针对 Logger 自身的方法 */
     Logger.enabledInnerLogger = false;
@@ -193,10 +209,14 @@ var Logger = /** @class */ (function () {
     /** 日志配置，不同的类和方法使用不同的日志级别 */
     Logger.config = (_a = {},
         _a[Logger.CATEGORY_ROOT] = LoggerLevel.DEBUG,
+        _a["Common.canvas"] = LoggerLevel.WARN,
+        _a["Common.selection"] = LoggerLevel.WARN,
+        _a["Common.windowCenterPoint"] = LoggerLevel.WARN,
         _a["Common"] = LoggerLevel.DEBUG,
         _a["MemoryPainter.incrementOrigin"] = LoggerLevel.WARN,
         _a["MemoryPainter.subtract"] = LoggerLevel.WARN,
         _a["MemoryPainter.getDirectionHandler"] = LoggerLevel.WARN,
+        _a["EntityProperty.parse"] = LoggerLevel.WARN,
         _a);
     /** 日志缓存，category 为 key */
     Logger.loggers = {};
@@ -430,24 +450,26 @@ var Common = /** @class */ (function () {
     /**
      * 清除图形内的文本。
      *
-     * @param graphics  图形
+     * @param graphics 图形
      */
     Common.clearGraphicsText = function (graphics) {
         var _this_1 = this;
         if (graphics instanceof Array) {
-            return graphics.forEach(function (graphic) { return _this_1.clearGraphicsText(graphic); });
+            graphics.forEach(function (graphic) { return _this_1.clearGraphicsText(graphic); });
+            return;
         }
         if (graphics instanceof Group) {
             graphics.graphics.forEach(function (graphic) { return _this_1.clearGraphicsText(graphic); });
         }
         else {
-            graphics.strokeType && (graphics.text = "");
+            // 带边框的图形
+            graphics instanceof Solid && graphics.strokeType && (graphics.text = "");
         }
     };
     /**
      * 获取矩形指定位置处的点。方位顺序：上下左右，top-left。
      *
-     * @param {Rect} rect 矩形
+     * @param rect 矩形
      * @param location 位置，top、middle、bottom、left、center、right
      * @return 点
      */
@@ -467,7 +489,7 @@ var Common = /** @class */ (function () {
      *
      * PlugIn.find('com.github.peacetrue.learn.graffle').library('common').pointsOfRect();
      *
-     * @param {Rect} rect 矩形
+     * @param rect 矩形
      * @return {Point[]} 点集合
      */
     Common.pointsOfRect = function (rect) {
@@ -583,9 +605,7 @@ var Common = /** @class */ (function () {
             }
         }
     };
-    /**
-     * 定位到选中图形所在位置。
-     */
+    /** 定位到选中图形所在位置 */
     Common.locateCenter = function () {
         var window = document.windows[0];
         var selection = window.selection;
@@ -642,12 +662,12 @@ var Common = /** @class */ (function () {
     // 反例：其他类库未完成初始化时，不能获取当前类库
     // 正例：library.plugIn.resourceNamed("logger.js").fetch(response => eval(response.toString()));
     // eval 时需要注意绑定的对象
-    Common.loadClass = function (name, path) {
+    Common.loadClass = function (plugIn, name, path) {
         if (path === void 0) { path = "libs/".concat(name, ".js"); }
         if (name in Object) {
             return new Promise(function (resolve, reject) { return resolve(Object[name]); });
         }
-        return this.promiseUrlFetch(this.plugIn.resourceNamed(path))
+        return this.promiseUrlFetch(plugIn.resourceNamed(path))
             .then(function (response) {
             var content = response.data;
             eval(content);
@@ -726,20 +746,27 @@ var Common = /** @class */ (function () {
     Common.size2point = function (size) {
         return new Point(size.width, size.height);
     };
-    Common.test = function () {
+    Common.invokeCachely = function (cache, key, invoker) {
+        var value = cache[key];
+        if (value)
+            return value;
+        value = invoker(key);
+        cache[key] = value;
+        return value;
     };
-    /** 上下左右中 5 个磁极 */
-    Common.magnets_5 = [new Point(0, 0),
-        new Point(1.00, 1.00), new Point(1.00, -1.00),
-        new Point(-1.00, -1.00), new Point(-1.00, 1.00),
+    /**  9 个磁极，9 宫格 */
+    Common.magnets_6 = [
+        new Point(-1.00, -1.00), new Point(-1.00, 0), new Point(-1.00, 1.00),
+        new Point(0, -1.00), new Point(0, 0), new Point(0, 1.00),
+        new Point(1.00, -1.00), new Point(1.00, 0), new Point(1.00, 1.00),
     ];
     /** 保存各 canvas 的配置，以 canvas.name 为 key */
     Common.canvasOptions = {};
     return Common;
 }());
 /**
- * 枚举，key 为名称，value 为索引
- * 示例：{0: "BOTTOM_UP", 1: "LEFT_RIGHT", 2: "RIGHT_LEFT", BOTTOM_UP: 0, LEFT_RIGHT: 1, RIGHT_LEFT: 2}
+ * 枚举，key 为名称，value 为索引，即针对后 3 项
+ * MemoryDirection：{0: "BOTTOM_UP", 1: "LEFT_RIGHT", 2: "RIGHT_LEFT", BOTTOM_UP: 0, LEFT_RIGHT: 1, RIGHT_LEFT: 2}
  */
 var Enum = /** @class */ (function () {
     function Enum() {
@@ -750,10 +777,18 @@ var Enum = /** @class */ (function () {
         var values = Object.values(enums);
         console.info("values: ", values);
     };
+    /**
+     * 获取 键 集合，键是枚举名称。
+     * Object.keys(MemoryDirection)：0,1,2,3,LEFT_RIGHT,RIGHT_LEFT,UP_BOTTOM,BOTTOM_UP
+     */
     Enum.keys = function (enums) {
         var keys = Object.keys(enums);
         return keys.slice(keys.length / 2);
     };
+    /**
+     * 获取 值 集合，值是枚举索引
+     * Object.values(MemoryDirection)：LEFT_RIGHT,RIGHT_LEFT,UP_BOTTOM,BOTTOM_UP,0,1,2,3
+     */
     Enum.values = function (enums) {
         var keys = Object.values(enums);
         return keys.slice(keys.length / 2);
@@ -1189,11 +1224,7 @@ var PeaceTable = /** @class */ (function () {
         this.cellFillColor = PeaceTable.cellFillColors[text || ""] || PeaceTable.cellFillColors["*"];
         this.cellFillColor && (shape.fillColor = this.cellFillColor);
         text && (shape.text = text);
-        // 5 个磁极：中上下左右
-        shape.magnets = [new Point(0, 0),
-            new Point(1.00, 1.00), new Point(1.00, -1.00),
-            new Point(-1.00, -1.00), new Point(-1.00, 1.00),
-        ];
+        shape.magnets = Common.magnets_6;
         return shape;
     };
     PeaceTable.extractGraphicTexts = function (graphic) {
@@ -1245,29 +1276,176 @@ var PeaceTable = /** @class */ (function () {
     };
     return PeaceTable;
 }());
+var ClassDiagram = /** @class */ (function () {
+    function ClassDiagram() {
+    }
+    ClassDiagram.parse = function (content) {
+        var classDiagram = Object.assign(new ClassDiagram(), content);
+        classDiagram.entities = content.entities.map(function (item) { return Entity.parse(item); });
+        return classDiagram;
+    };
+    return ClassDiagram;
+}());
+var Entity = /** @class */ (function () {
+    function Entity() {
+    }
+    Entity.parse = function (content) {
+        var entity = Object.assign(new Entity(), content);
+        entity.properties = content.properties.map(function (item) { return EntityProperty.parse(item); });
+        return entity;
+    };
+    Entity.prototype.toString = function () {
+        var _a;
+        return JSON.stringify(__assign(__assign({}, this), { properties: (_a = this.properties) === null || _a === void 0 ? void 0 : _a.length }));
+    };
+    return Entity;
+}());
+var EntityProperty = /** @class */ (function () {
+    function EntityProperty() {
+    }
+    EntityProperty.parse = function (content) {
+        return Object.assign(new EntityProperty(), content);
+    };
+    EntityProperty.prototype.toString = function () {
+        var _a;
+        return JSON.stringify(__assign(__assign({}, this), { entity: (_a = this.entity) === null || _a === void 0 ? void 0 : _a.name }));
+    };
+    return EntityProperty;
+}());
+var Instance = /** @class */ (function () {
+    function Instance() {
+    }
+    Instance.parse = function (content) {
+        var entity = Object.assign(new Instance(), content);
+        entity.properties = content.properties.map(function (item) { return InstanceProperty.parse(__assign(__assign({}, item), { instance: entity })); });
+        return entity;
+    };
+    Instance.prototype.toString = function () {
+        var _a;
+        return JSON.stringify(__assign(__assign({}, this), { properties: (_a = this.properties) === null || _a === void 0 ? void 0 : _a.length }));
+    };
+    return Instance;
+}());
+var InstanceProperty = /** @class */ (function () {
+    function InstanceProperty() {
+    }
+    InstanceProperty.parse = function (content) {
+        return Object.assign(new InstanceProperty(), content);
+    };
+    InstanceProperty.prototype.toString = function () {
+        var _a;
+        return JSON.stringify(__assign(__assign({}, this), { instance: (_a = this.instance) === null || _a === void 0 ? void 0 : _a.type }));
+    };
+    return InstanceProperty;
+}());
+var ClassDiagramPainter = /** @class */ (function () {
+    function ClassDiagramPainter() {
+        this.table = PeaceTable.small;
+        this.offset = new Size(100, 100);
+    }
+    /** 插件入口 */
+    ClassDiagramPainter.draw = function (canvas, origin) {
+        if (canvas === void 0) { canvas = Common.canvas(); }
+        if (origin === void 0) { origin = Common.windowCenterPoint(); }
+        return this.defaults.drawInteractively(canvas, origin);
+    };
+    /** 脚本入口 */
+    ClassDiagramPainter.drawScript = function (content) {
+        return this.defaults.draw(Common.canvas(), Common.windowCenterPoint(), ClassDiagram.parse(content));
+    };
+    ClassDiagramPainter.prototype.drawInteractively = function (canvas, origin) {
+        var _this_1 = this;
+        return Common.readFileContentAssociatively(canvas, ClassDiagramPainter.locationKey)
+            .then(function (response) {
+            return _this_1.draw(canvas, origin, ClassDiagram.parse(JSON.parse(response.data)));
+        })
+            .catch(function (response) { return Logger.getLogger().error(response); });
+    };
+    ClassDiagramPainter.resetCache = function (entities) {
+        ClassDiagramPainter.entities = entities;
+        ClassDiagramPainter.entityGraphics = {};
+    };
+    ClassDiagramPainter.invokeCachely = function (key, invoker) {
+        return Common.invokeCachely(ClassDiagramPainter.entityGraphics, key, invoker);
+    };
+    ClassDiagramPainter.prototype.draw = function (canvas, origin, classDiagram) {
+        var _this_1 = this;
+        ClassDiagramPainter.resetCache(classDiagram.entities);
+        // 水平方法绘制实体类
+        var increase = new Point(this.table.cellSize.width + this.offset.width, 0);
+        // let increase: Point = new Point(0, this.table.cellSize.height + this.offset.height);
+        var entities = classDiagram.entities;
+        if (classDiagram.entry)
+            entities = classDiagram.entities.filter(function (item) { return item.name == classDiagram.entry; });
+        return entities.map(function (entity, index) {
+            return ClassDiagramPainter.invokeCachely(entity.name, function () {
+                origin = index === 0 ? origin : origin.add(increase);
+                return _this_1.drawEntity(canvas, origin, entity);
+            });
+        });
+    };
+    ClassDiagramPainter.prototype.drawEntity = function (canvas, origin, entity) {
+        var _this_1 = this;
+        var increase = new Point(0, this.table.cellSize.height);
+        var header = this.drawHeader(canvas, origin, entity.name);
+        var properties = entity.properties.map(function (property, index) {
+            return _this_1.drawProperty(canvas, origin = origin.add(increase), property);
+        });
+        return new Group(__spreadArray([header], properties, true));
+    };
+    ClassDiagramPainter.prototype.drawHeader = function (canvas, origin, name) {
+        var header = this.table.drawCell(canvas, origin, name);
+        Common.bolder(header);
+        return header;
+    };
+    ClassDiagramPainter.prototype.drawProperty = function (canvas, origin, property) {
+        var cell = this.table.drawCell(canvas, origin, "".concat(property.type, ":").concat(property.name));
+        cell.textHorizontalAlignment = HorizontalTextAlignment.Left;
+        this.drawPropertyRef(canvas, origin, cell, property);
+        return cell;
+    };
+    ClassDiagramPainter.prototype.drawPropertyRef = function (canvas, origin, propertyCell, property) {
+        var _this_1 = this;
+        if (!property.ref)
+            return;
+        var entity = ClassDiagramPainter.entities.find(function (item) { return item.name == property.ref; });
+        if (!entity)
+            return;
+        origin = origin.add(new Point(this.table.cellSize.width + this.offset.width, 0));
+        var entityGroup = ClassDiagramPainter.invokeCachely(entity.name, function () { return _this_1.drawEntity(canvas, origin, entity); });
+        var entityHeader = entityGroup.graphics[entityGroup.graphics.length - 1];
+        var line = canvas.connect(propertyCell, entityHeader);
+        line.lineType = LineType.Orthogonal; // 直角
+        line.tailMagnet = 8; // 磁极索引从 1 开始，逆时针转动
+        line.headType = "FilledArrow";
+        line.headMagnet = 2;
+    };
+    ClassDiagramPainter.locationKey = ClassDiagramPainter.name;
+    ClassDiagramPainter.defaults = Logger.proxyInstance(new ClassDiagramPainter());
+    ClassDiagramPainter.entities = [];
+    ClassDiagramPainter.entityGraphics = {};
+    return ClassDiagramPainter;
+}());
 /** 内存 */
 var Memory = /** @class */ (function () {
     function Memory() {
         this.blocks = []; //内存块集合
+        // public toString() {
+        //   return JSON.stringify({...this, blocks: `[${this.blocks?.length}]`});
+        // }
     }
-    Memory.instance = function (title, blocks) {
-        var memory = new Memory();
-        memory.title = title;
-        memory.blocks = blocks;
-        return memory;
+    Memory.instance = function (content) {
+        return Object.assign(new Memory(), content);
     };
     /** 解析内存数据 */
-    Memory.parse = function (data) {
-        if (data instanceof Array) {
-            return this.instance(null, MemoryBlock.parse(data));
-        }
-        return this.instance(data["title"], MemoryBlock.parse(data["blocks"]));
+    Memory.parseJson = function (content) {
+        return this.instance({ blocks: MemoryBlock.parseJson(content) });
     };
     Memory.parseMaps = function (content) {
-        return this.instance(null, MemoryBlock.parseMaps(content));
+        return this.instance({ blocks: MemoryBlock.parseMaps(content) });
     };
-    Memory.prototype.toString = function () {
-        return JSON.stringify(this);
+    Memory.parseFrames = function (content) {
+        return this.instance({ blocks: MemoryBlock.parseFrames(content) });
     };
     return Memory;
 }());
@@ -1282,6 +1460,59 @@ var MemoryBlock = /** @class */ (function () {
     MemoryBlock.instance = function (object) {
         return Object.assign(new MemoryBlock(undefined, undefined, undefined), object);
     };
+    MemoryBlock.parse = function (content, type) {
+        switch (type) {
+            case "maps":
+                return this.parseMaps(content);
+            case "frames":
+                return this.parseFrames(content);
+            case "json":
+                return this.parseJson(content);
+            default:
+                return this.parseRaw(content);
+        }
+    };
+    /** 从 json 字符串解析 */
+    MemoryBlock.parseJson = function (content) {
+        return this.parseRaw(JSON.parse(content));
+    };
+    MemoryBlock.parseRaw = function (content) {
+        var _this_1 = this;
+        return content.map(function (item) { return _this_1.instance(item); });
+    };
+    /** 解析内存映射，升序排列。linux 下 /proc/<pid>/maps 内容 */
+    MemoryBlock.parseMaps = function (content) {
+        //1                                  2     3         4      5        6
+        //561d970c5000-561d970c6000          r--p  00000000  08:03  1581273  /usr/lib/jvm/java-17-openjdk-amd64/bin/java
+        var lines = content.split("\n");
+        var blocks = lines
+            .filter(function (line) { return line.trim(); }) // 删除空行
+            .map(function (line) { return line.split(/ +/); }) // 按空格分割
+            .map(function (cells) {
+            var addresses = cells[0].split("-");
+            // 16 个 f 需要使用 bigint 才能表示
+            return new MemoryBlock(BigInt(parseInt(addresses[0], 16)), BigInt(parseInt(addresses[1], 16)), (cells[5] || "").split("/").pop() || "[anon]");
+        });
+        // 填充顶部
+        blocks.unshift(new MemoryBlock(BigInt(0), blocks[0].startAddress)); // 从 0 开始显示
+        // 填充尾部
+        blocks.push(new MemoryBlock(blocks[blocks.length - 1].endAddress, // bigint 和 bigint 才能相减求 size
+        BigInt("0xffffffffffffffff")));
+        this.merge(blocks);
+        return blocks;
+    };
+    /** 解析栈帧信息，升序排列 */
+    MemoryBlock.parseFrames = function (content) {
+        // * thread #1, name = 'thread.bin'
+        //   * {"startAddress": "0x00007fffffffdf70", "endAddress": "0x00007fffffffe050", "description": "libc.so.6`__GI___futex_abstimed_wait_cancelable64" }
+        var lines = content.split("\n").filter(function (item) { return item.trim(); });
+        lines = Array.from(new Set(lines)); // 除重
+        return lines.map(function (line) { return line.substr(line.indexOf("*") + 1); })
+            .map(function (item) { return JSON.parse(item); })
+            .map(function (item) { return new MemoryBlock(parseInt(item.startAddress, 16), parseInt(item.endAddress, 16), item.description); })
+            // 过滤掉 {"startAddress": "0x00007fffffffe1b0", "endAddress": "0x0000000000000000", "description": "thread.bin`_start" }
+            .filter(function (item) { return item.endAddress > item.startAddress; });
+    };
     MemoryBlock.prototype.size = function () {
         return MemoryBlock.subtract(this.endAddress, this.startAddress);
     };
@@ -1295,11 +1526,6 @@ var MemoryBlock = /** @class */ (function () {
     };
     MemoryBlock.subtract = function (left, right) {
         return Number(BigInt(left) - BigInt(right));
-    };
-    /** 将记录转换为内存块对象 */
-    MemoryBlock.parse = function (object) {
-        var _this_1 = this;
-        return object.map(function (item) { return _this_1.instance(item); });
     };
     /** 按内存地址升序排列 */
     MemoryBlock.ascend = function (blocks) {
@@ -1349,27 +1575,6 @@ var MemoryBlock = /** @class */ (function () {
                 i--;
             }
         }
-    };
-    /** 解析内存映射，升序排列。linux 下 /proc/<pid>/maps 内容 */
-    MemoryBlock.parseMaps = function (content) {
-        //1                                  2     3         4      5        6
-        //561d970c5000-561d970c6000          r--p  00000000  08:03  1581273  /usr/lib/jvm/java-17-openjdk-amd64/bin/java
-        var lines = content.split("\n");
-        var blocks = lines
-            .filter(function (line) { return line.trim(); }) // 删除空行
-            .map(function (line) { return line.split(/ +/); }) // 按空格分割
-            .map(function (cells) {
-            var addresses = cells[0].split("-");
-            // 16 个 f 需要使用 bigint 才能表示
-            return new MemoryBlock(BigInt(parseInt(addresses[0], 16)), BigInt(parseInt(addresses[1], 16)), (cells[5] || "").split("/").pop() || "[anon]");
-        });
-        // 填充顶部
-        blocks.unshift(new MemoryBlock(BigInt(0), blocks[0].startAddress)); // 从 0 开始显示
-        // 填充尾部
-        blocks.push(new MemoryBlock(blocks[blocks.length - 1].endAddress, // bigint 和 bigint 才能相减求 size
-        BigInt("0xffffffffffffffff")));
-        this.merge(blocks);
-        return blocks;
     };
     return MemoryBlock;
 }());
@@ -1592,7 +1797,6 @@ var MemoryPainter = /** @class */ (function () {
      *
      * @param canvas 画布
      * @param origin 起点
-     * @param [content] 内容
      * @return 虚拟内存图
      */
     MemoryPainter.drawMemory = function (canvas, origin) {
@@ -1622,6 +1826,10 @@ var MemoryPainter = /** @class */ (function () {
             Common.option(canvas, MemoryPainter.drawMemoryLocationKey, null);
         return memory.drawMemoryInteractively(canvas, origin);
     };
+    MemoryPainter.drawScript = function (_a) {
+        var _b = _a.direction, direction = _b === void 0 ? MemoryDirection[MemoryDirection.BOTTOM_UP] : _b, _c = _a.type, type = _c === void 0 ? "json" : _c, content = _a.content;
+        return this[direction].drawMemoryBlocks(Common.canvas(), Common.windowCenterPoint(), MemoryBlock.parse(content, type));
+    };
     /**
      * 交互式地绘制虚拟内存。
      *
@@ -1636,10 +1844,15 @@ var MemoryPainter = /** @class */ (function () {
         if (origin === void 0) { origin = Common.windowCenterPoint(); }
         return Common.readFileContentSelectively(canvas, MemoryPainter.drawMemoryLocationKey, content)
             .then(function (response) {
-            if (response.url && response.url.toString().endsWith(".maps")) {
-                return Memory.parseMaps(response.data);
+            if (response.url) {
+                if (response.url.toString().endsWith(".maps")) {
+                    return Memory.parseMaps(response.data);
+                }
+                if (response.url.toString().endsWith(".frames")) {
+                    return Memory.parseFrames(response.data);
+                }
             }
-            return Memory.parse(JSON.parse(response.data));
+            return Memory.parseJson(JSON.parse(response.data));
         })
             .then(function (response) { return _this_1.drawMemory(canvas, origin, response); })
             .catch(function (response) { return Logger.getLogger().error(response); });
@@ -1666,8 +1879,8 @@ var MemoryPainter = /** @class */ (function () {
      *
      * @param canvas 画布
      * @param origin 起点，矩形的左下点
-     * @param  blocks 内存块集合
-     * @return  绘制的图形
+     * @param blocks 内存块集合
+     * @return 绘制的图形
      */
     MemoryPainter.prototype.drawMemoryBlocks = function (canvas, origin, blocks) {
         var _this_1 = this;
@@ -1729,7 +1942,7 @@ var MemoryPainter = /** @class */ (function () {
         var formattedAddress = this.formatMemoryAddress(address);
         var labelOrigin = this.getDirectionHandler().getAddressLabelOrigin(this, line.points[1]);
         var label = canvas.addText(formattedAddress, labelOrigin);
-        label.magnets = Common.magnets_5;
+        label.magnets = Common.magnets_6;
         this.table.cellTextSize && (label.textSize = this.table.cellTextSize);
         return new Group([line, label]);
     };
@@ -1799,7 +2012,11 @@ var _this = (function () { return this; })();
 //@formatter:on
 (function () {
     var library = new PlugIn.Library(new Version("0.1"));
-    [Common, Memory, MemoryBlock, MemoryPainter, Stepper, LayerSwitcher].forEach(function (item) {
+    [Common,
+        Memory, MemoryBlock, MemoryPainter,
+        ClassDiagram, Entity, EntityProperty, ClassDiagramPainter,
+        Stepper, LayerSwitcher]
+        .forEach(function (item) {
         library[item.name] = item;
         Logger.proxyClassStaticFunction(item);
     });

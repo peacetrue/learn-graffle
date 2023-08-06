@@ -15,3 +15,9 @@
 . 目录结构调整：automation 变更为 src
 . 拆分 Makefile 文件
 . 重构类库组织方式：All in common.ts
+
+== 2.0.0
+
+. 调整源码目录结构
+. 统一调用入口 class-caller.js
+. 绘制类图
