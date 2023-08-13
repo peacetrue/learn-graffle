@@ -530,7 +530,7 @@ class Common {
    * @param {Boolean} [center] 默认在起点处绘制文本，true 在中点处绘制文本
    * @return  线（或带文本）
    */
-  public static drawLine(canvas: Canvas, points, description, center) {
+  public static drawLine(canvas: Canvas, points: Point[], description?: string, center?: boolean) {
     let line = canvas.newLine();
     line.shadowColor = null;
     line.points = points;
@@ -540,6 +540,11 @@ class Common {
     return new Group([line, canvas.addText(description, location)]);
   }
 
+  public static drawLine2(canvas: Canvas, options: Partial<Line>) {
+    let line = canvas.newLine();
+    line.shadowColor = null;
+    return Object.assign(line, options);
+  }
 
   public static getPosition(start, end, target) {
     const endVector = end.subtract(start);
@@ -755,6 +760,12 @@ class Common {
     return new Point(size.width, size.height);
   }
 
+  /** 获取多个点之间的中间点 */
+  public static centerPoint(points: Point[]): Point {
+    let total = points.reduce((prev, next) => prev.add(next), new Point(0, 0));
+    return new Point(total.x / points.length, total.y / points.length);
+  }
+
   public static invokeCachely<K extends string, V>(cache: Record<K, V>, key: K, invoker: (key: K) => V) {
     let value = cache[key];
     if (value) return value;
@@ -767,7 +778,7 @@ class Common {
 
 /**
  * 枚举，key 为名称，value 为索引，即针对后 3 项
- * GroupDirection：{0: "BOTTOM_UP", 1: "LEFT_RIGHT", 2: "RIGHT_LEFT", BOTTOM_UP: 0, LEFT_RIGHT: 1, RIGHT_LEFT: 2}
+ * ComponentDirection：{0: "BOTTOM_UP", 1: "LEFT_RIGHT", 2: "RIGHT_LEFT", BOTTOM_UP: 0, LEFT_RIGHT: 1, RIGHT_LEFT: 2}
  */
 class Enum {
   public static view(enums: Record<string | number, number | string>) {
@@ -779,7 +790,7 @@ class Enum {
 
   /**
    * 获取 键 集合，键是枚举名称。
-   * Object.keys(GroupDirection)：0,1,2,3,LEFT_RIGHT,RIGHT_LEFT,UP_BOTTOM,BOTTOM_UP
+   * Object.keys(ComponentDirection)：0,1,2,3,LEFT_RIGHT,RIGHT_LEFT,UP_BOTTOM,BOTTOM_UP
    */
   public static keys(enums: Record<string | number, number | string>) {
     let keys = Object.keys(enums);
@@ -788,7 +799,7 @@ class Enum {
 
   /**
    * 获取 值 集合，值是枚举索引
-   * Object.values(GroupDirection)：LEFT_RIGHT,RIGHT_LEFT,UP_BOTTOM,BOTTOM_UP,0,1,2,3
+   * Object.values(ComponentDirection)：LEFT_RIGHT,RIGHT_LEFT,UP_BOTTOM,BOTTOM_UP,0,1,2,3
    */
   public static values(enums: Record<string | number, number | string>) {
     let keys = Object.values(enums);
@@ -1287,133 +1298,268 @@ class TablePainter {
 }
 
 /**
- * 组方向即数据展示方向。
+ * 组件方向即组件展示方向。
  * 绘图方向始终是从上向下，数据展示方向则有多种可能。
  * 内存块集合传入时约定为升序排列（无序会自动排序），
  * 通过控制内存块集合的排序（升序/降序），可以控制内存的显示方向
  */
-enum GroupDirection {
+enum ComponentDirection {
   LEFT_RIGHT,//从左往右
   RIGHT_LEFT,//从右往左，每个地址都对应一个字节，字节内部各标志位使用情况；eflags 寄存器各标志位使用情况
   UP_BOTTOM,//从上往下
   BOTTOM_UP,//从下往上，虚拟地址空间图
 }
 
-/** 处理与组方向相关的内容 */
-interface GroupDirectionHandler {
+enum ComponentDirectionAxis {
+  HORIZONTAL,
+  VERTICAL
+}
 
-  /** 排序元素集合 */
-  order(elements: any[]): void;
+enum ComponentDirectionOrder {
+  SEQUENTIAL,
+  REVERSE
+}
+
+class Direction {
+
+  public static LEFT_RIGHT: Direction = this.construct(ComponentDirectionAxis.HORIZONTAL, ComponentDirectionOrder.SEQUENTIAL);
+  public static RIGHT_LEFT: Direction = this.construct(ComponentDirectionAxis.HORIZONTAL, ComponentDirectionOrder.REVERSE);
+  public static UP_BOTTOM: Direction = this.construct(ComponentDirectionAxis.VERTICAL, ComponentDirectionOrder.SEQUENTIAL);
+  public static BOTTOM_UP: Direction = this.construct(ComponentDirectionAxis.VERTICAL, ComponentDirectionOrder.REVERSE);
+
+  public axis: ComponentDirectionAxis;
+  public order: ComponentDirectionOrder;
+
+  public static construct(axis: ComponentDirectionAxis, order: ComponentDirectionOrder) {
+    return Logger.proxyInstance(Object.assign(new Direction(), {axis, order}));
+  }
+
+  public static parse(direction: ComponentDirection) {
+    return this[ComponentDirection[direction]] as Direction;
+  }
+
+  public isHorizontal(reverseAxis?: boolean) {
+    let horizontal = this.axis === ComponentDirectionAxis.HORIZONTAL;
+    return reverseAxis === undefined ? horizontal : (horizontal && !reverseAxis) || (!horizontal && reverseAxis);
+  }
+
+  public isSequential() {
+    return this.order === ComponentDirectionOrder.SEQUENTIAL;
+  }
+
+  private static offsetSize(horizontal: boolean, size: Size) {
+    return horizontal ? size.width : size.height;
+  }
+
+  private static offsetPoint(horizontal: boolean, size: number) {
+    return horizontal ? new Point(size, 0) : new Point(0, size);
+  }
+
+  /** 获取位置偏移，受坐标轴和排序影响 */
+  public offset(size: number, reverseAxis?) {
+    if (!this.isSequential()) size = -size;
+    return this.offsetAxis(size, reverseAxis);
+  }
+
+  /** 获取位置偏移，仅受坐标轴影响 */
+  public offsetAxis(size: number, reverseAxis?: boolean): Point {
+    return Direction.offsetPoint(this.isHorizontal(reverseAxis), size);
+  }
+
+  /** 获取位置偏移，受坐标轴和排序影响 */
+  public offsetSize(size: Size, reverseAxis?) {
+    let horizontal = this.isHorizontal(reverseAxis);
+    let _size = Direction.offsetSize(horizontal, size);
+    if (!this.isSequential()) _size = -_size;
+    return Direction.offsetPoint(horizontal, _size);
+  }
+
+  /** 获取位置偏移，仅受坐标轴影响 */
+  public offsetAxisSize(size: Size, reverseAxis?) {
+    let horizontal = this.isHorizontal(reverseAxis);
+    return Direction.offsetPoint(horizontal, Direction.offsetSize(horizontal, size));
+  }
+
+  public toString() {
+    return JSON.stringify({axis: ComponentDirectionAxis[this.axis], order: ComponentDirectionOrder[this.order]});
+  }
+}
+
+/** 具有方向的画师  */
+interface DirectionPainter {
+  setDirection(direction: ComponentDirection);
+
+  getDirection(): ComponentDirection;
+}
+
+abstract class AbstractDirectionPainter implements DirectionPainter {
+
+  public direction: ComponentDirection;
+
+  getDirection(): ComponentDirection {
+    return this.direction;
+  }
+
+  setDirection(direction: ComponentDirection) {
+    this.direction = direction;
+  }
+
+  abstract getDirectionHandler(): any;
+}
+
+abstract class AbstractDirectionHandler {
+
+  public direction: Direction;
+
+  constructor(direction: Direction) {
+    this.direction = direction;
+  }
+
+  public static instances(Type) {
+    return Enum.values(ComponentDirection).map(item => Logger.proxyInstance(new Type(Direction.parse(item))));
+  }
+
+}
+
+/** 处理与注解绘制方向相关的内容 */
+interface NoteDirectionHandler {
+
+  /** 获取 to 锚线的起点 */
+  getToAnchorLineStartPoint(painter: NotePainter, fromAnchorLineStartPoint: Point, size: number): Point;
+
+  /** 获取锚线的终点 */
+  getAnchorLineEndPoint(painter: NotePainter, anchorLineStartPoint: Point): Point;
+
+  /** 获取标线的起点 */
+  getMarkLineStartPoint(painter: NotePainter, anchorLineStartPoint: Point): Point;
+}
+
+
+class AllNoteDirectionHandler extends AbstractDirectionHandler implements NoteDirectionHandler {
+
+  public static defaults: AllNoteDirectionHandler[] = this.instances(AllNoteDirectionHandler);
+
+  getToAnchorLineStartPoint(painter: NotePainter, fromAnchorLineStartPoint: Point, scale: number): Point {
+    return fromAnchorLineStartPoint.add(this.direction.offsetSize(painter.elementSize).scale(scale));
+  }
+
+  getAnchorLineEndPoint(painter: NotePainter, anchorLineStartPoint: Point): Point {
+    return anchorLineStartPoint.add(this.direction.offsetAxis(painter.anchorLineSize, true));
+  }
+
+  getMarkLineStartPoint(painter: NotePainter, anchorLineStartPoint: Point): Point {
+    return anchorLineStartPoint.add(this.direction.offsetAxis(painter.anchorLineSize * painter.markLineRate / 100, true));
+  }
+
+  public toString() {
+    return JSON.stringify(this);
+  }
+}
+
+class Note {
+  public description: string;
+  public scale: number
+
+  public static construct(description: string, scale: number) {
+    let note = new Note();
+    note.description = description;
+    note.scale = scale;
+    return note;
+  }
+}
+
+/** 注解绘制者 */
+class NotePainter extends AbstractDirectionPainter {
+
+  public static defaults = this.instance({});
+
+  public anchorLineSize: number = 50;   // 锚线宽/高
+  public markLineRate: number = 90;     // 标线起始百分比
+  public elementSize: Size = new Size(100, 50);      // 元素宽/高
+
+  public static instance(options: Partial<NotePainter>) {
+    return Logger.proxyInstance(Object.assign(new NotePainter(), options));
+  }
+
+  public static drawScript(options: { direction: string, content: Note }) {
+    return this.instance({direction: ComponentDirection[options.direction]})
+      .draw(Common.canvas(), Common.windowCenterPoint(), options.content);
+  }
+
+  public draw(canvas: Canvas, origin: Point, note: Note) {
+    let directionHandler = this.getDirectionHandler();
+    return NotePainter.draw(this, canvas, origin, directionHandler.getToAnchorLineStartPoint(this, origin, note.scale), note.description);
+  }
+
+  public static draw(painter: NotePainter, canvas: Canvas, fromAnchorLineStartPoint: Point, toAnchorLineStartPoint: Point, content: string) {
+    let directionHandler = painter.getDirectionHandler();
+    let fromAnchorLine = Common.drawLine2(canvas, {points: [fromAnchorLineStartPoint, directionHandler.getAnchorLineEndPoint(painter, fromAnchorLineStartPoint)]});
+    let toAnchorLine = Common.drawLine2(canvas, {points: [toAnchorLineStartPoint, directionHandler.getAnchorLineEndPoint(painter, toAnchorLineStartPoint)]});
+    let markLine = Common.drawLine2(canvas, {
+      points: [directionHandler.getMarkLineStartPoint(painter, fromAnchorLineStartPoint), directionHandler.getMarkLineStartPoint(painter, toAnchorLineStartPoint)],
+      headType: "FilledArrow", tailType: "FilledArrow",
+    });
+    let textSolid = canvas.addText(content, Common.centerPoint(markLine.points));
+    textSolid.textSize = 12;
+    return new Group([fromAnchorLine, toAnchorLine, markLine, textSolid]);
+  }
+
+  public getDirectionHandler() {
+    return AllNoteDirectionHandler.defaults[this.direction];
+  }
+
+}
+
+/** 处理与集合方向相关的内容 */
+interface CollectionDirectionHandler {
+
+  /** 预处理集合元素 */
+  prepare(painter: CollectionPainter, elements: any[]): void;
 
   /** 获取下一个元素起点 */
-  getNextOrigin(painter: GroupPainter<any>, origin: Point): Point;
+  getNextOrigin(painter: CollectionPainter, origin: Point): Point;
 }
 
 /** 提供空实现。 */
-class GroupDirectionHandlerAdapter implements GroupDirectionHandler {
+class CollectionDirectionHandlerAdapter implements CollectionDirectionHandler {
 
-  order(blocks: any[]): void {
+  prepare(painter: CollectionPainter, elements: any[]): void {
   }
 
-  getNextOrigin(painter: GroupPainter<any>, origin: Point): Point {
+  getNextOrigin(painter: CollectionPainter, origin: Point): Point {
     return origin;
   }
 
 }
 
-/** 顺序的 */
-class SequentialGroupDirectionHandler extends GroupDirectionHandlerAdapter {
+class CompositeCollectionDirectionHandler implements CollectionDirectionHandler {
 
-  public static defaults: SequentialGroupDirectionHandler = new SequentialGroupDirectionHandler();
-
-}
-
-/** 逆序的 */
-class ReverseGroupDirectionHandler extends GroupDirectionHandlerAdapter {
-
-  public static defaults: ReverseGroupDirectionHandler = new ReverseGroupDirectionHandler();
-
-  /** 排序内存块集合 */
-  order(blocks: any[]): void {
-    blocks.reverse();
-  }
-
-}
-
-class HorizontalGroupDirectionHandler extends GroupDirectionHandlerAdapter {
-
-  public static defaults: HorizontalGroupDirectionHandler = new HorizontalGroupDirectionHandler();
-
-  getNextOrigin(painter: GroupPainter<any>, origin: Point): Point {
-    return origin.add(new Point(painter.cellSize.width, 0));
-  }
-
-}
-
-class VerticalGroupDirectionHandler extends GroupDirectionHandlerAdapter {
-
-  public static defaults: VerticalGroupDirectionHandler = new VerticalGroupDirectionHandler();
-
-  getNextOrigin(painter: GroupPainter<any>, origin: Point): Point {
-    return origin.add(new Point(0, painter.cellSize.height));
-  }
-
-}
-
-class CompositeGroupDirectionHandler implements GroupDirectionHandler {
-
-  /** 顺序 / 逆序 */
-  private orderHandler: GroupDirectionHandler;
   /** 水平 / 垂直 */
-  private axisHandler: GroupDirectionHandler;
+  private axisHandler: CollectionDirectionHandler;
+  /** 顺序 / 逆序 */
+  private orderHandler: CollectionDirectionHandler;
 
-  constructor(orderHandler: GroupDirectionHandler, axisHandler: GroupDirectionHandler) {
+  constructor(orderHandler: CollectionDirectionHandler, axisHandler: CollectionDirectionHandler) {
     this.orderHandler = orderHandler;
     this.axisHandler = axisHandler;
   }
 
-  order(elements: any[]): void {
-    this.orderHandler.order(elements);
+  prepare(painter: CollectionPainter, elements: any[]): void {
+    this.orderHandler.prepare(painter, elements);
   }
 
-  getNextOrigin(painter: GroupPainter<any>, origin: Point): Point {
+  getNextOrigin(painter: CollectionPainter, origin: Point): Point {
     return this.axisHandler.getNextOrigin(painter, origin);
   }
 
 }
 
 /**
- * 组绘制者，绘制一组相关元素。
+ * 集合绘制者，绘制一组相关元素。
  *
  * @param <E> 元素类型
  */
-abstract class GroupPainter<E> {
-
-  public static directionHandlers = GroupPainter.buildDirectionHandlers();
-
-  public static buildDirectionHandlers() {
-    let directionHandlers: Record<GroupDirection, GroupDirectionHandler> = {
-      [GroupDirection.LEFT_RIGHT]: new CompositeGroupDirectionHandler(SequentialGroupDirectionHandler.defaults, HorizontalGroupDirectionHandler.defaults),
-      [GroupDirection.RIGHT_LEFT]: new CompositeGroupDirectionHandler(ReverseGroupDirectionHandler.defaults, HorizontalGroupDirectionHandler.defaults),
-      [GroupDirection.UP_BOTTOM]: new CompositeGroupDirectionHandler(SequentialGroupDirectionHandler.defaults, VerticalGroupDirectionHandler.defaults),
-      [GroupDirection.BOTTOM_UP]: new CompositeGroupDirectionHandler(ReverseGroupDirectionHandler.defaults, VerticalGroupDirectionHandler.defaults),
-    }
-    Object.keys(directionHandlers).forEach((value, index) => {
-      directionHandlers[value] = Logger.proxyInstance(directionHandlers[value]);
-    });
-    return directionHandlers;
-  }
-
-  public static cellFillColors: Record<string, Color> = {
-    "[anon]": Color.RGB(0.75, 1.0, 0.75, null),// 浅绿，已占用但不知道具体用途
-    "": Color.RGB(0.8, 0.8, 0.8, null),        // 灰色，无描述表示未使用
-    "*": Color.RGB(0.75, 1.0, 1.0, null),      // 蓝色，有效数据
-  };
-
-  public cellSize: Size = new Size(200, 20);
-  public cellTextSize: number = 12;
-  public cellFillColor: Color = Color.RGB(1.0, 1.0, 0.75, null);// 黄色
-  public direction: GroupDirection = GroupDirection.UP_BOTTOM;
+abstract class CollectionPainter extends AbstractDirectionPainter {
 
   /**
    * 绘制。
@@ -1423,45 +1569,63 @@ abstract class GroupPainter<E> {
    * @param content 内容
    * @return 形状
    */
-  public draw(canvas: Canvas, origin: Point, content: E[]): Group {
+  public draw(canvas: Canvas, origin: Point, content: any[]): Group {
     let directionHandler = this.getDirectionHandler();
-    directionHandler.order(content);
+    directionHandler.prepare(this, content);
     return new Group(content.map((text, index) => {
       origin = index === 0 ? origin : directionHandler.getNextOrigin(this, origin);
-      return this.drawCell(canvas, origin, text);
+      return this.drawElement(canvas, origin, text);
     }));
   }
 
-  public getDirectionHandler() {
-    return GroupPainter.directionHandlers[this.direction];
-  }
+  public abstract getDirectionHandler(): CollectionDirectionHandler;
 
-  public abstract drawCell(canvas: Canvas, origin: Point, element: E);
+  public abstract drawElement(canvas: Canvas, origin: Point, element: any): Graphic;
 
 }
 
-/**
- * 组绘制者，绘制一组相关元素。
- *
- * @param <E> 元素类型
- */
-class StringGroupPainter extends GroupPainter<string> {
+class AllRectCollectionDirectionHandler extends AbstractDirectionHandler implements CollectionDirectionHandler {
 
-  /** 倾向于水平绘图，宽度调小 */
-  public static horizontal = StringGroupPainter.instance({cellSize: new Size(150, 20)});
-  public static vertical = StringGroupPainter.instance({cellSize: new Size(200, 20)});
+  public static defaults: AllRectCollectionDirectionHandler[] = this.instances(AllRectCollectionDirectionHandler);
+
+  prepare(painter: CollectionPainter, elements: any[]): void {
+    !this.direction.isSequential() && elements.reverse();
+  }
+
+  getNextOrigin(painter: RectCollectionPainter, origin: Point): Point {
+    return origin.add(this.direction.offsetAxisSize(painter.elementSize));
+  }
+
+}
+
+
+/** 矩阵集合绘制者 */
+class RectCollectionPainter extends CollectionPainter {
+
+  public static horizontal = RectCollectionPainter.instance({elementSize: new Size(150, 20)});
+  public static vertical = RectCollectionPainter.instance({elementSize: new Size(200, 20)});
   public static defaults = this.horizontal;
 
-  public static instance<T>(options: Partial<StringGroupPainter>) {
-    return Logger.proxyInstance(Object.assign(new StringGroupPainter(), options));
+  public static elementFillColors: Record<string, Color> = {
+    "[anon]": Color.RGB(0.75, 1.0, 0.75, null),// 浅绿，已占用但不知道具体用途
+    "": Color.RGB(0.8, 0.8, 0.8, null),        // 灰色，无描述表示未使用
+    "*": Color.RGB(0.75, 1.0, 1.0, null),      // 蓝色，有效数据
+  };
+
+  public elementSize: Size = new Size(200, 20);
+  public elementTextSize: number = 12;
+  public elementFillColor: Color = Color.RGB(1.0, 1.0, 0.75, null);// 黄色
+
+  public static instance(options: Partial<RectCollectionPainter>) {
+    return Logger.proxyInstance(Object.assign(new RectCollectionPainter(), options));
   }
 
   /** 缓存每个 canvas 使用的 Painter */
-  public static canvasCache: Record<string, StringGroupPainter> = {};
+  public static canvasCache: Record<string, RectCollectionPainter> = {};
   /** 绘制模式-键 */
   public static modeKey: string = "mode";
   /** 绘制模式-默认值*/
-  public static modeValue: number = GroupDirection.BOTTOM_UP;
+  public static modeValue: number = ComponentDirection.BOTTOM_UP;
   /** 文件位置键 */
   public static locationKey = this.name;
 
@@ -1474,26 +1638,26 @@ class StringGroupPainter extends GroupPainter<string> {
    */
   public static draw(canvas: Canvas = Common.canvas(), origin: Point = Common.windowCenterPoint()) {
     let canvasName = canvas.name;
-    let painter = StringGroupPainter.canvasCache[canvasName];
+    let painter = RectCollectionPainter.canvasCache[canvasName];
     // shift 强制重新配置
     if (app.shiftKeyDown || !painter) {
       let form = new Form();
-      form.addField(new Form.Field.Option(this.modeKey, "绘制模式", Enum.values(GroupDirection), Enum.keys(GroupDirection), this.modeValue, null), 0);
-      return form.show("配置地址空间绘制参数", "确定")
+      form.addField(new Form.Field.Option(this.modeKey, "绘制模式", Enum.values(ComponentDirection), Enum.keys(ComponentDirection), this.modeValue, null), 0);
+      return form.show("配置矩阵参数", "确定")
         .then(response => {
           painter = this.instance({direction: response.values[this.modeKey]});
-          StringGroupPainter.canvasCache[canvasName] = painter;
+          RectCollectionPainter.canvasCache[canvasName] = painter;
           painter.drawInteractively(canvas, origin);
         })
         .catch(response => Logger.getLogger().error("error:", response));
     }
     // option 重新选择文件
-    if (app.optionKeyDown) Common.option(canvas, MemoryPainter.drawMemoryLocationKey, null);
+    if (app.optionKeyDown) Common.option(canvas, this.locationKey, null);
     return painter.drawInteractively(canvas, origin);
   }
 
   public static drawScript(options: { direction: string, content: string[] }) {
-    return this.instance({...options, direction: GroupDirection[options.direction]})
+    return this.instance({direction: ComponentDirection[options.direction]})
       .draw(Common.canvas(), Common.windowCenterPoint(), options.content);
   }
 
@@ -1502,16 +1666,17 @@ class StringGroupPainter extends GroupPainter<string> {
    *
    * @param canvas 画布
    * @param origin 起点
-   * @param [content] 内容
-   * @return 虚拟内存图
+   * @return 组图
    */
-  public drawInteractively(canvas: Canvas = Common.canvas(), origin: Point = Common.windowCenterPoint(), content?: string) {
-    return Common.readFileContentSelectively(canvas, StringGroupPainter.locationKey, content)
-      .then(response => {
-        return JSON.parse(response.data);
-      })
-      .then(response => this.draw(canvas, origin, response))
+  public drawInteractively(canvas: Canvas, origin: Point) {
+    return Common.readFileContentAssociatively(canvas, RectCollectionPainter.locationKey)
+      .then(response => this.draw(canvas, origin, JSON.parse(response.data)))
       .catch(response => Logger.getLogger().error(response));
+  }
+
+
+  public getDirectionHandler() {
+    return AllRectCollectionDirectionHandler.defaults[this.direction];
   }
 
   /**
@@ -1519,21 +1684,126 @@ class StringGroupPainter extends GroupPainter<string> {
    *
    * @param canvas 画布
    * @param origin 起点
-   * @param text 文本
+   * @param content 内容
    * @return 形状
    */
-  public drawCell(canvas: Canvas, origin: Point, text?: string): Shape {
+  public drawElement(canvas: Canvas, origin: Point, content?: string): Shape {
     let shape = canvas.newShape();
-    shape.geometry = new Rect(origin.x, origin.y, this.cellSize.width, this.cellSize.height);
+    shape.geometry = new Rect(origin.x, origin.y, this.elementSize.width, this.elementSize.height);
     shape.shadowColor = null;
-    this.cellTextSize && (shape.textSize = this.cellTextSize);
-    this.cellFillColor = StringGroupPainter.cellFillColors[text || ""] || StringGroupPainter.cellFillColors["*"];
-    this.cellFillColor && (shape.fillColor = this.cellFillColor);
-    text && (shape.text = text);
+    this.elementTextSize && (shape.textSize = this.elementTextSize);
+    this.elementFillColor = RectCollectionPainter.elementFillColors[content || ""] || RectCollectionPainter.elementFillColors["*"];
+    this.elementFillColor && (shape.fillColor = this.elementFillColor);
+    content && (shape.text = content);
     shape.magnets = Common.magnets_6;
     return shape;
   }
 
+}
+
+class RectNote {
+  public start: number;
+  public end: number;
+  public description: string;
+
+  public toString() {
+    return JSON.stringify(this);
+  }
+}
+
+class NoteRectCollection {
+  public elements: any[];
+  public notes: RectNote[][];
+}
+
+interface NoteRectCollectionDirectionHandler {
+  /** 预处理数据 */
+  prepare(painter: NoteRectCollectionPainter, noteRectCollection: NoteRectCollection): void
+
+  /** 获取注释的起点 */
+  getNoteStartPoint(painter: NoteRectCollectionPainter, elementStartPoint: Point): Point
+
+  /** 获取锚线的起点 */
+  getAnchorLineStartPoint(painter: NoteRectCollectionPainter, noteStartPoint: Point, note: RectNote): Point
+}
+
+
+class AllNoteRectCollectionDirectionHandler extends AbstractDirectionHandler implements NoteRectCollectionDirectionHandler {
+
+  public static defaults: AllNoteRectCollectionDirectionHandler[] = this.instances(AllNoteRectCollectionDirectionHandler);
+
+  prepare(painter: NoteRectCollectionPainter, noteRectCollection: NoteRectCollection): void {
+    if (this.direction.isSequential()) return;
+    let length = noteRectCollection.elements.length;
+    noteRectCollection.notes.forEach(notes => {
+      notes.forEach(note => {
+        note.start = length - note.start;
+        note.end = length - note.end;
+      });
+    });
+  }
+
+  getNoteStartPoint(painter: NoteRectCollectionPainter, elementStartPoint: Point): Point {
+    return elementStartPoint.add(this.direction.offsetAxisSize(painter.rectCollectionPainter.elementSize, true));
+  }
+
+  getAnchorLineStartPoint(painter: NoteRectCollectionPainter, noteStartPoint: Point, note: RectNote): Point {
+    return noteStartPoint.add(this.direction.offsetAxisSize(painter.rectCollectionPainter.elementSize).scale(note.start));
+  }
+
+}
+
+class NoteRectCollectionPainter extends AbstractDirectionPainter {
+
+  public rectCollectionPainter: RectCollectionPainter = RectCollectionPainter.instance({});
+  public notePainter: NotePainter = NotePainter.instance({});
+
+  public static instance<T>(options: Partial<NoteRectCollectionPainter>): NoteRectCollectionPainter {
+    let instance = Object.assign(new NoteRectCollectionPainter(), options);
+    instance.setDirection(options.direction);
+    instance.notePainter.elementSize = instance.rectCollectionPainter.elementSize;
+    return Logger.proxyInstance(instance);
+  }
+
+  public static drawScript(options: { direction: string, content: NoteRectCollection }) {
+    return this.instance({...options, direction: ComponentDirection[options.direction]})
+      .draw(Common.canvas(), Common.windowCenterPoint(), options.content);
+  }
+
+  public draw(canvas: Canvas, origin: Point, noteRectCollection: NoteRectCollection) {
+    let rectCollectionGroup = this.rectCollectionPainter.draw(canvas, origin, noteRectCollection.elements);
+    let directionHandler = this.getDirectionHandler();
+    let noteStartPoint = directionHandler.getNoteStartPoint(this, origin);
+    directionHandler.prepare(this, noteRectCollection);
+    let notesGroup = new Group(this.drawNoteGroups(canvas, noteStartPoint, noteRectCollection));
+    return new Group([rectCollectionGroup, notesGroup]);
+  }
+
+  private drawNoteGroups(canvas: Canvas, noteStartPoint: Point, noteRectCollection: NoteRectCollection) {
+    return noteRectCollection.notes.map(notes => {
+      this.notePainter.anchorLineSize *= 2;
+      return this.drawNoteGroup(canvas, noteStartPoint, notes);
+    });
+  }
+
+  private drawNoteGroup(canvas: Canvas, noteStartPoint: Point, notes: RectNote[]) {
+    let directionHandler = this.getDirectionHandler();
+    return new Group(notes.map(note => {
+        let anchorLineStartPoint = directionHandler.getAnchorLineStartPoint(this, noteStartPoint, note);
+        return this.notePainter.draw(canvas, anchorLineStartPoint, Note.construct(note.description, Math.abs(note.end - note.start) + 1));
+      })
+    );
+  }
+
+  setDirection(direction: ComponentDirection) {
+    super.setDirection(direction);
+    this.rectCollectionPainter.setDirection(direction);
+    this.notePainter.setDirection(direction);
+  }
+
+  getDirectionHandler() {
+    return AllNoteRectCollectionDirectionHandler.defaults[this.direction];
+  }
 }
 
 class ClassDiagram {
@@ -1547,9 +1817,9 @@ class ClassDiagram {
     return classDiagram;
   }
 
-  // public toString() {
-  //   return JSON.stringify({...this, entities: this.entities?.length});
-  // }
+  public toString() {
+    return JSON.stringify({...this, entities: this.entities?.length});
+  }
 }
 
 class Entity {
@@ -1615,7 +1885,7 @@ class ClassDiagramPainter {
 
   public static locationKey: string = ClassDiagramPainter.name;
   public static defaults: ClassDiagramPainter = Logger.proxyInstance(new ClassDiagramPainter());
-  public table: StringGroupPainter = StringGroupPainter.defaults;
+  public table: RectCollectionPainter = RectCollectionPainter.defaults;
   public offset: Size = new Size(100, 100);
 
   /** 插件入口 */
@@ -1651,8 +1921,8 @@ class ClassDiagramPainter {
   public draw(canvas: Canvas, origin: Point, classDiagram: ClassDiagram) {
     ClassDiagramPainter.resetCache(classDiagram.entities);
     // 水平方法绘制实体类
-    let increase: Point = new Point(this.table.cellSize.width + this.offset.width, 0);
-    // let increase: Point = new Point(0, this.table.cellSize.height + this.offset.height);
+    let increase: Point = new Point(this.table.elementSize.width + this.offset.width, 0);
+    // let increase: Point = new Point(0, this.table.elementSize.height + this.offset.height);
     let entities = classDiagram.entities;
     if (classDiagram.entry) entities = classDiagram.entities.filter(item => item.name == classDiagram.entry);
     return entities.map((entity, index) => {
@@ -1665,7 +1935,7 @@ class ClassDiagramPainter {
 
 
   public drawEntity(canvas: Canvas, origin: Point, entity: Entity) {
-    let increase: Point = new Point(0, this.table.cellSize.height);
+    let increase: Point = new Point(0, this.table.elementSize.height);
     let header = this.drawHeader(canvas, origin, entity.name);
     let properties = entity.properties.map((property, index) => {
       return this.drawProperty(canvas, origin = origin.add(increase), property);
@@ -1674,23 +1944,23 @@ class ClassDiagramPainter {
   }
 
   public drawHeader(canvas: Canvas, origin: Point, name) {
-    let header = this.table.drawCell(canvas, origin, name);
+    let header = this.table.drawElement(canvas, origin, name);
     Common.bolder(header);
     return header;
   }
 
   public drawProperty(canvas: Canvas, origin: Point, property: EntityProperty) {
-    let cell = this.table.drawCell(canvas, origin, `${property.type}:${property.name}`);
-    cell.textHorizontalAlignment = HorizontalTextAlignment.Left;
-    this.drawPropertyRef(canvas, origin, cell, property);
-    return cell;
+    let element = this.table.drawElement(canvas, origin, `${property.type}:${property.name}`);
+    element.textHorizontalAlignment = HorizontalTextAlignment.Left;
+    this.drawPropertyRef(canvas, origin, element, property);
+    return element;
   }
 
   public drawPropertyRef(canvas: Canvas, origin: Point, propertyCell: Shape, property: EntityProperty) {
     if (!property.ref) return;
     let entity = ClassDiagramPainter.entities.find(item => item.name == property.ref);
     if (!entity) return;
-    origin = origin.add(new Point(this.table.cellSize.width + this.offset.width, 0));
+    origin = origin.add(new Point(this.table.elementSize.width + this.offset.width, 0));
     let entityGroup = ClassDiagramPainter.invokeCachely(entity.name, () => this.drawEntity(canvas, origin, entity));
     let entityHeader = entityGroup.graphics[entityGroup.graphics.length - 1];
     let line = canvas.connect(propertyCell, entityHeader);
@@ -2006,11 +2276,11 @@ class MemoryHorizontalHandler extends MemoryDirectionHandlerAdapter {
   public static defaults: MemoryHorizontalHandler = new MemoryHorizontalHandler();
 
   getNextOrigin(painter: MemoryPainter, origin: Point): Point {
-    return origin.add(new Point(painter.table.cellSize.width, 0));
+    return origin.add(new Point(painter.table.elementSize.width, 0));
   }
 
   getAddressLineOrigin(painter: MemoryPainter, origin: Point): Point {
-    return origin.add(new Point(0, painter.table.cellSize.height));
+    return origin.add(new Point(0, painter.table.elementSize.height));
   }
 
   getAddressLineEndpoint(painter: MemoryPainter, origin: Point): Point {
@@ -2027,7 +2297,7 @@ class MemoryVerticalHandler extends MemoryDirectionHandlerAdapter {
   public static defaults: MemoryVerticalHandler = new MemoryVerticalHandler();
 
   getNextOrigin(painter: MemoryPainter, origin: Point): Point {
-    return origin.add(new Point(0, painter.table.cellSize.height));
+    return origin.add(new Point(0, painter.table.elementSize.height));
   }
 
   getAddressLineEndpoint(painter: MemoryPainter, origin: Point): Point {
@@ -2107,14 +2377,14 @@ class BottomUpHandler extends AbstractMemoryDirectionHandler {
 /** 内存画师 */
 class MemoryPainter {
 
-  public static LEFT_RIGHT: MemoryPainter = MemoryPainter.instanceHorizontal({direction: GroupDirection.LEFT_RIGHT});
-  public static RIGHT_LEFT: MemoryPainter = MemoryPainter.instanceHorizontal({direction: GroupDirection.RIGHT_LEFT});
-  public static UP_BOTTOM: MemoryPainter = MemoryPainter.instance({direction: GroupDirection.UP_BOTTOM});
-  public static BOTTOM_UP: MemoryPainter = MemoryPainter.instance({direction: GroupDirection.BOTTOM_UP});
+  public static LEFT_RIGHT: MemoryPainter = MemoryPainter.instanceHorizontal({direction: ComponentDirection.LEFT_RIGHT});
+  public static RIGHT_LEFT: MemoryPainter = MemoryPainter.instanceHorizontal({direction: ComponentDirection.RIGHT_LEFT});
+  public static UP_BOTTOM: MemoryPainter = MemoryPainter.instance({direction: ComponentDirection.UP_BOTTOM});
+  public static BOTTOM_UP: MemoryPainter = MemoryPainter.instance({direction: ComponentDirection.BOTTOM_UP});
   public static directionHandlers = MemoryPainter.buildDirectionHandlers();
 
-  public table: StringGroupPainter = StringGroupPainter.defaults;
-  public direction: GroupDirection = GroupDirection.BOTTOM_UP; //绘制方向
+  public table: RectCollectionPainter = RectCollectionPainter.defaults;
+  public direction: ComponentDirection = ComponentDirection.BOTTOM_UP; //绘制方向
   public showAddress: boolean = true;   // 是否显示地址
   public addressLineLength: number = 50;
   public addressLabelSize: Size = new Size(150, 20);
@@ -2134,7 +2404,7 @@ class MemoryPainter {
 
   public static instanceHorizontal(options: Partial<MemoryPainter>) {
     let painter = new MemoryPainter();
-    painter.table = StringGroupPainter.horizontal;
+    painter.table = RectCollectionPainter.horizontal;
     painter.addressLineLength = 25;
     painter.addressLabelTextBase = 10;
     painter.showSize = false;
@@ -2142,11 +2412,11 @@ class MemoryPainter {
   }
 
   public static buildDirectionHandlers() {
-    let directionHandlers: Record<GroupDirection, MemoryDirectionHandler> = {
-      [GroupDirection.LEFT_RIGHT]: new LeftRightHandler(),
-      [GroupDirection.RIGHT_LEFT]: new RightLeftHandler(),
-      [GroupDirection.UP_BOTTOM]: new UpBottomHandler(),
-      [GroupDirection.BOTTOM_UP]: new BottomUpHandler(),
+    let directionHandlers: Record<ComponentDirection, MemoryDirectionHandler> = {
+      [ComponentDirection.LEFT_RIGHT]: new LeftRightHandler(),
+      [ComponentDirection.RIGHT_LEFT]: new RightLeftHandler(),
+      [ComponentDirection.UP_BOTTOM]: new UpBottomHandler(),
+      [ComponentDirection.BOTTOM_UP]: new BottomUpHandler(),
     }
     Object.keys(directionHandlers).forEach((value, index) => {
       directionHandlers[value] = Logger.proxyInstance(directionHandlers[value]);
@@ -2164,7 +2434,7 @@ class MemoryPainter {
   /** 绘制模式-键 */
   public static modeKey: string = "mode";
   /** 绘制模式-默认值*/
-  public static modeValue: number = GroupDirection.BOTTOM_UP;
+  public static modeValue: number = ComponentDirection.BOTTOM_UP;
   public static drawMemoryLocationKey = "drawMemoryLocation";
 
 
@@ -2181,13 +2451,13 @@ class MemoryPainter {
     // shift 强制重新配置
     if (app.shiftKeyDown || !memory) {
       let form = new Form();
-      form.addField(new Form.Field.Option(this.modeKey, "绘制模式", Enum.values(GroupDirection), Enum.keys(GroupDirection), this.modeValue, null), 0);
+      form.addField(new Form.Field.Option(this.modeKey, "绘制模式", Enum.values(ComponentDirection), Enum.keys(ComponentDirection), this.modeValue, null), 0);
       return form.show("配置地址空间绘制参数", "确定")
         .then(response => {
           // Logger.getLogger().debug("form: ", response.values); // error
           Logger.getLogger().debug("modeKey: ", response.values[this.modeKey]);
-          Logger.getLogger().debug("GroupDirection: ", GroupDirection[response.values[this.modeKey]]);
-          memory = MemoryPainter[GroupDirection[response.values[this.modeKey]]];
+          Logger.getLogger().debug("ComponentDirection: ", ComponentDirection[response.values[this.modeKey]]);
+          memory = MemoryPainter[ComponentDirection[response.values[this.modeKey]]];
           Logger.getLogger().debug("direction: ", memory.direction);
           MemoryPainter.canvasCache[canvasName] = memory;
           memory.drawMemoryInteractively(canvas, origin);
@@ -2200,7 +2470,7 @@ class MemoryPainter {
   }
 
   public static drawScript({
-                             direction = GroupDirection[GroupDirection.BOTTOM_UP],
+                             direction = ComponentDirection[ComponentDirection.BOTTOM_UP],
                              type = "json",
                              content
                            }: Record<string, any>) {
@@ -2240,7 +2510,7 @@ class MemoryPainter {
   public drawTitle(canvas: Canvas, origin: Point, title: string) {
     let solid = canvas.addText(title, origin);
     Common.bolder(solid);
-    solid.textSize = this.table.cellTextSize + 2;
+    solid.textSize = this.table.elementTextSize + 2;
     return solid;
   }
 
@@ -2260,9 +2530,9 @@ class MemoryPainter {
       if (index !== 0) origin = this.getDirectionHandler().getNextOrigin(this, origin);
       // let prev = blocks[index - 1], curr = blocks[index];
       // if (prev.endAddress < curr.startAddress) {
-      //   origin = origin.subtract(new Point(0, this.table.cellSize.height));
+      //   origin = origin.subtract(new Point(0, this.table.elementSize.height));
       // } else if (prev.endAddress > curr.startAddress) {
-      //   origin = origin.add(new Point(0, this.table.cellSize.height / 2));
+      //   origin = origin.add(new Point(0, this.table.elementSize.height / 2));
       // }
       return this.drawMemoryBlock(canvas, origin, block)
     });
@@ -2278,10 +2548,10 @@ class MemoryPainter {
    * @return  绘制的图形
    */
   public drawMemoryBlock(canvas: Canvas, origin: Point, block: MemoryBlock) {
-    let cell = this.table.drawCell(canvas, origin, block.description);
+    let element = this.table.drawElement(canvas, origin, block.description);
     let directionHandler = this.getDirectionHandler();
     let endpoint = directionHandler.getNextOrigin(this, origin);
-    let graphics: Graphic[] = [cell];
+    let graphics: Graphic[] = [element];
     if (this.showAddress) {
       block.endAddress != null && graphics.push(this.drawMemoryAddress(canvas, origin, directionHandler.getAddressStartValue(this, block)))
       block.startAddress != null && graphics.push(this.drawMemoryAddress(canvas, endpoint, directionHandler.getAddressEndValue(this, block)))
@@ -2289,7 +2559,7 @@ class MemoryPainter {
     if (this.showSize && block.startAddress != null && block.endAddress != null) {
       let size = block.size();
       if (this.sizeStyle === 'outer') graphics.push(this.drawMemorySize(canvas, endpoint, size));
-      else cell.text += ` (${Common.formatMemorySize(size)})`;
+      else element.text += ` (${Common.formatMemorySize(size)})`;
     }
     return new Group(graphics);
   }
@@ -2312,7 +2582,7 @@ class MemoryPainter {
     let labelOrigin = this.getDirectionHandler().getAddressLabelOrigin(this, line.points[1]);
     let label = canvas.addText(formattedAddress, labelOrigin);
     label.magnets = Common.magnets_6;
-    this.table.cellTextSize && (label.textSize = this.table.cellTextSize);
+    this.table.elementTextSize && (label.textSize = this.table.elementTextSize);
     return new Group([line, label]);
   }
 
@@ -2342,7 +2612,7 @@ class MemoryPainter {
     let upLine = canvas.newLine();
     upLine.shadowColor = null;
     let upLineStartPoint = new Point(origin.x - this.addressLineLength - this.addressLabelSize.width / 2, origin.y + this.addressLabelSize.height / 2);
-    let upLineEndPoint = new Point(upLineStartPoint.x, upLineStartPoint.y + this.table.cellSize.height / 2 - this.addressLabelSize.height);
+    let upLineEndPoint = new Point(upLineStartPoint.x, upLineStartPoint.y + this.table.elementSize.height / 2 - this.addressLabelSize.height);
     upLine.points = [upLineStartPoint, upLineEndPoint];
     upLine.headType = "FilledArrow";
 
@@ -2357,8 +2627,8 @@ class MemoryPainter {
 
     let bottomLine = canvas.newLine();
     bottomLine.shadowColor = null;
-    let bottomLineStartPoint = new Point(upLineStartPoint.x, origin.y + this.table.cellSize.height - this.addressLabelSize.height / 2);
-    let bottomLineEndPoint = new Point(bottomLineStartPoint.x, bottomLineStartPoint.y - this.table.cellSize.height / 2 + this.addressLabelSize.height);
+    let bottomLineStartPoint = new Point(upLineStartPoint.x, origin.y + this.table.elementSize.height - this.addressLabelSize.height / 2);
+    let bottomLineEndPoint = new Point(bottomLineStartPoint.x, bottomLineStartPoint.y - this.table.elementSize.height / 2 + this.addressLabelSize.height);
     bottomLine.points = [bottomLineStartPoint, bottomLineEndPoint];
     bottomLine.headType = "FilledArrow";
     return new Group([upLine, label, bottomLine]);
@@ -2374,7 +2644,8 @@ var _this = (function () {return this;})();
 (() => {
   let library = new PlugIn.Library(new Version("0.1"));
   [Common,
-    GroupPainter, StringGroupPainter,
+    NotePainter,
+    CollectionPainter, RectCollectionPainter, NoteRectCollectionPainter,
     Memory, MemoryBlock, MemoryPainter,
     ClassDiagram, Entity, EntityProperty, ClassDiagramPainter,
     Stepper, LayerSwitcher]

@@ -39,28 +39,47 @@ tsc:
 	cd $(SRC)/plugins/bundle/peace.omnigrafflejs/Resources && tsc
 	sleep $(tsc.delay)
 
-# 绘制 4 个方向的组图
-## 绘制方向
-#group.directions:=LEFT_RIGHT
-group.directions:=LEFT_RIGHT RIGHT_LEFT UP_BOTTOM BOTTOM_UP
-$(BUILD)/%.StringGroupPainter: $(BUILD)/%
-	@echo '["StringGroupPainter",{"direction":"$(DIRECTION)","content":$(shell cat $<)}]' > $@
-omnijs.group.case: tsc
-	@for direction in $(group.directions) ; do \
-		make clean/demo-group.json.StringGroupPainter* omnijs-run-file DIRECTION=$$direction SCRIPT_CONTENT=class-caller.js.encode SCRIPT_ARGUMENT=demo-group.json.StringGroupPainter.encode; \
-	done
-omnijs.group.clean.case: clean/*group.*;
 
+## 组件绘制方向
+component.directions:=LEFT_RIGHT
+#component.directions:=LEFT_RIGHT RIGHT_LEFT UP_BOTTOM BOTTOM_UP
+DIRECTION?=UP_BOTTOM
+# 绘制注解
+$(BUILD)/NotePainter:
+	@echo '["NotePainter",{"direction":"$(DIRECTION)","content":{"description":"test","scale":2}}]' > $@
+omnijs.note.case: tsc
+	@for direction in $(component.directions) ; do \
+		make clean/NotePainter* omnijs-run-file DIRECTION=$$direction SCRIPT_CONTENT=class-caller.js.encode SCRIPT_ARGUMENT=NotePainter.encode; \
+	done
+
+# 绘制矩阵集合
+$(BUILD)/RectCollectionPainter:
+	@echo '["RectCollectionPainter",{"direction":"$(DIRECTION)","content":["Eden", "Survivor", "Survivor", "Virtual", "Old", "Virtual"]}]' > $@
+omnijs.rect.collection.case: tsc
+	@for direction in $(component.directions) ; do \
+		make clean/*RectCollectionPainter* omnijs-run-file DIRECTION=$$direction SCRIPT_CONTENT=class-caller.js.encode SCRIPT_ARGUMENT=RectCollectionPainter.encode; \
+	done
+
+
+# 绘制注解矩形集合
+$(BUILD)/%.NoteRectCollectionPainter: $(BUILD)/%
+	@echo '["NoteRectCollectionPainter",{"direction":"$(DIRECTION)","content":$(shell cat $<)}]' > $@
+omnijs.note.rect.collection.case: tsc
+	@for direction in $(component.directions) ; do \
+		make clean/*NoteRectCollectionPainter* omnijs-run-file DIRECTION=$$direction SCRIPT_CONTENT=class-caller.js.encode SCRIPT_ARGUMENT=java.heap.json.NoteRectCollectionPainter.encode; \
+	done
+
+# painter.name:=
 # 绘制 4 个方向的内存图
 # json 数据添加方向参数
 define memory.direction
 $(BUILD)/%.$(1): $(BUILD)/%;
 	@echo '["MemoryPainter",{"direction":"$(1)","type":"raw","content":$$(shell cat $$<)}]' > $$@
 endef
-$(foreach target,$(group.directions),$(eval $(call memory.direction,$(target))))
+$(foreach target,$(component.directions),$(eval $(call memory.direction,$(target))))
 
 omnijs.memory.case: tsc
-	@for direction in $(group.directions) ; do \
+	@for direction in $(component.directions) ; do \
 		make omnijs-run-file SCRIPT_CONTENT=class-caller.js.encode SCRIPT_ARGUMENT=demo-memory.json.$$direction.encode; \
 	done
 omnijs.memory.clean.case: clean/*memory.*;

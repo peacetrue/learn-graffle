@@ -535,6 +535,11 @@ var Common = /** @class */ (function () {
         var location = center ? this.centerOfPoints(points[0], points[points.length - 1]) : points[0];
         return new Group([line, canvas.addText(description, location)]);
     };
+    Common.drawLine2 = function (canvas, options) {
+        var line = canvas.newLine();
+        line.shadowColor = null;
+        return Object.assign(line, options);
+    };
     Common.getPosition = function (start, end, target) {
         var endVector = end.subtract(start);
         var targetVector = target.subtract(start);
@@ -746,6 +751,11 @@ var Common = /** @class */ (function () {
     Common.size2point = function (size) {
         return new Point(size.width, size.height);
     };
+    /** 获取多个点之间的中间点 */
+    Common.centerPoint = function (points) {
+        var total = points.reduce(function (prev, next) { return prev.add(next); }, new Point(0, 0));
+        return new Point(total.x / points.length, total.y / points.length);
+    };
     Common.invokeCachely = function (cache, key, invoker) {
         var value = cache[key];
         if (value)
@@ -766,7 +776,7 @@ var Common = /** @class */ (function () {
 }());
 /**
  * 枚举，key 为名称，value 为索引，即针对后 3 项
- * GroupDirection：{0: "BOTTOM_UP", 1: "LEFT_RIGHT", 2: "RIGHT_LEFT", BOTTOM_UP: 0, LEFT_RIGHT: 1, RIGHT_LEFT: 2}
+ * ComponentDirection：{0: "BOTTOM_UP", 1: "LEFT_RIGHT", 2: "RIGHT_LEFT", BOTTOM_UP: 0, LEFT_RIGHT: 1, RIGHT_LEFT: 2}
  */
 var Enum = /** @class */ (function () {
     function Enum() {
@@ -779,7 +789,7 @@ var Enum = /** @class */ (function () {
     };
     /**
      * 获取 键 集合，键是枚举名称。
-     * Object.keys(GroupDirection)：0,1,2,3,LEFT_RIGHT,RIGHT_LEFT,UP_BOTTOM,BOTTOM_UP
+     * Object.keys(ComponentDirection)：0,1,2,3,LEFT_RIGHT,RIGHT_LEFT,UP_BOTTOM,BOTTOM_UP
      */
     Enum.keys = function (enums) {
         var keys = Object.keys(enums);
@@ -787,7 +797,7 @@ var Enum = /** @class */ (function () {
     };
     /**
      * 获取 值 集合，值是枚举索引
-     * Object.values(GroupDirection)：LEFT_RIGHT,RIGHT_LEFT,UP_BOTTOM,BOTTOM_UP,0,1,2,3
+     * Object.values(ComponentDirection)：LEFT_RIGHT,RIGHT_LEFT,UP_BOTTOM,BOTTOM_UP,0,1,2,3
      */
     Enum.values = function (enums) {
         var keys = Object.values(enums);
@@ -1220,111 +1230,212 @@ var TablePainter = /** @class */ (function () {
     return TablePainter;
 }());
 /**
- * 组方向即数据展示方向。
+ * 组件方向即组件展示方向。
  * 绘图方向始终是从上向下，数据展示方向则有多种可能。
  * 内存块集合传入时约定为升序排列（无序会自动排序），
  * 通过控制内存块集合的排序（升序/降序），可以控制内存的显示方向
  */
-var GroupDirection;
-(function (GroupDirection) {
-    GroupDirection[GroupDirection["LEFT_RIGHT"] = 0] = "LEFT_RIGHT";
-    GroupDirection[GroupDirection["RIGHT_LEFT"] = 1] = "RIGHT_LEFT";
-    GroupDirection[GroupDirection["UP_BOTTOM"] = 2] = "UP_BOTTOM";
-    GroupDirection[GroupDirection["BOTTOM_UP"] = 3] = "BOTTOM_UP";
-})(GroupDirection || (GroupDirection = {}));
-/** 提供空实现。 */
-var GroupDirectionHandlerAdapter = /** @class */ (function () {
-    function GroupDirectionHandlerAdapter() {
+var ComponentDirection;
+(function (ComponentDirection) {
+    ComponentDirection[ComponentDirection["LEFT_RIGHT"] = 0] = "LEFT_RIGHT";
+    ComponentDirection[ComponentDirection["RIGHT_LEFT"] = 1] = "RIGHT_LEFT";
+    ComponentDirection[ComponentDirection["UP_BOTTOM"] = 2] = "UP_BOTTOM";
+    ComponentDirection[ComponentDirection["BOTTOM_UP"] = 3] = "BOTTOM_UP";
+})(ComponentDirection || (ComponentDirection = {}));
+var ComponentDirectionAxis;
+(function (ComponentDirectionAxis) {
+    ComponentDirectionAxis[ComponentDirectionAxis["HORIZONTAL"] = 0] = "HORIZONTAL";
+    ComponentDirectionAxis[ComponentDirectionAxis["VERTICAL"] = 1] = "VERTICAL";
+})(ComponentDirectionAxis || (ComponentDirectionAxis = {}));
+var ComponentDirectionOrder;
+(function (ComponentDirectionOrder) {
+    ComponentDirectionOrder[ComponentDirectionOrder["SEQUENTIAL"] = 0] = "SEQUENTIAL";
+    ComponentDirectionOrder[ComponentDirectionOrder["REVERSE"] = 1] = "REVERSE";
+})(ComponentDirectionOrder || (ComponentDirectionOrder = {}));
+var Direction = /** @class */ (function () {
+    function Direction() {
     }
-    GroupDirectionHandlerAdapter.prototype.order = function (blocks) {
+    Direction.construct = function (axis, order) {
+        return Logger.proxyInstance(Object.assign(new Direction(), { axis: axis, order: order }));
     };
-    GroupDirectionHandlerAdapter.prototype.getNextOrigin = function (painter, origin) {
+    Direction.parse = function (direction) {
+        return this[ComponentDirection[direction]];
+    };
+    Direction.prototype.isHorizontal = function (reverseAxis) {
+        var horizontal = this.axis === ComponentDirectionAxis.HORIZONTAL;
+        return reverseAxis === undefined ? horizontal : (horizontal && !reverseAxis) || (!horizontal && reverseAxis);
+    };
+    Direction.prototype.isSequential = function () {
+        return this.order === ComponentDirectionOrder.SEQUENTIAL;
+    };
+    Direction.offsetSize = function (horizontal, size) {
+        return horizontal ? size.width : size.height;
+    };
+    Direction.offsetPoint = function (horizontal, size) {
+        return horizontal ? new Point(size, 0) : new Point(0, size);
+    };
+    /** 获取位置偏移，受坐标轴和排序影响 */
+    Direction.prototype.offset = function (size, reverseAxis) {
+        if (!this.isSequential())
+            size = -size;
+        return this.offsetAxis(size, reverseAxis);
+    };
+    /** 获取位置偏移，仅受坐标轴影响 */
+    Direction.prototype.offsetAxis = function (size, reverseAxis) {
+        return Direction.offsetPoint(this.isHorizontal(reverseAxis), size);
+    };
+    /** 获取位置偏移，受坐标轴和排序影响 */
+    Direction.prototype.offsetSize = function (size, reverseAxis) {
+        var horizontal = this.isHorizontal(reverseAxis);
+        var _size = Direction.offsetSize(horizontal, size);
+        if (!this.isSequential())
+            _size = -_size;
+        return Direction.offsetPoint(horizontal, _size);
+    };
+    /** 获取位置偏移，仅受坐标轴影响 */
+    Direction.prototype.offsetAxisSize = function (size, reverseAxis) {
+        var horizontal = this.isHorizontal(reverseAxis);
+        return Direction.offsetPoint(horizontal, Direction.offsetSize(horizontal, size));
+    };
+    Direction.prototype.toString = function () {
+        return JSON.stringify({ axis: ComponentDirectionAxis[this.axis], order: ComponentDirectionOrder[this.order] });
+    };
+    var _c;
+    _c = Direction;
+    Direction.LEFT_RIGHT = _c.construct(ComponentDirectionAxis.HORIZONTAL, ComponentDirectionOrder.SEQUENTIAL);
+    Direction.RIGHT_LEFT = _c.construct(ComponentDirectionAxis.HORIZONTAL, ComponentDirectionOrder.REVERSE);
+    Direction.UP_BOTTOM = _c.construct(ComponentDirectionAxis.VERTICAL, ComponentDirectionOrder.SEQUENTIAL);
+    Direction.BOTTOM_UP = _c.construct(ComponentDirectionAxis.VERTICAL, ComponentDirectionOrder.REVERSE);
+    return Direction;
+}());
+var AbstractDirectionPainter = /** @class */ (function () {
+    function AbstractDirectionPainter() {
+    }
+    AbstractDirectionPainter.prototype.getDirection = function () {
+        return this.direction;
+    };
+    AbstractDirectionPainter.prototype.setDirection = function (direction) {
+        this.direction = direction;
+    };
+    return AbstractDirectionPainter;
+}());
+var AbstractDirectionHandler = /** @class */ (function () {
+    function AbstractDirectionHandler(direction) {
+        this.direction = direction;
+    }
+    AbstractDirectionHandler.instances = function (Type) {
+        return Enum.values(ComponentDirection).map(function (item) { return Logger.proxyInstance(new Type(Direction.parse(item))); });
+    };
+    return AbstractDirectionHandler;
+}());
+var AllNoteDirectionHandler = /** @class */ (function (_super) {
+    __extends(AllNoteDirectionHandler, _super);
+    function AllNoteDirectionHandler() {
+        return _super !== null && _super.apply(this, arguments) || this;
+    }
+    AllNoteDirectionHandler.prototype.getToAnchorLineStartPoint = function (painter, fromAnchorLineStartPoint, scale) {
+        return fromAnchorLineStartPoint.add(this.direction.offsetSize(painter.elementSize).scale(scale));
+    };
+    AllNoteDirectionHandler.prototype.getAnchorLineEndPoint = function (painter, anchorLineStartPoint) {
+        return anchorLineStartPoint.add(this.direction.offsetAxis(painter.anchorLineSize, true));
+    };
+    AllNoteDirectionHandler.prototype.getMarkLineStartPoint = function (painter, anchorLineStartPoint) {
+        return anchorLineStartPoint.add(this.direction.offsetAxis(painter.anchorLineSize * painter.markLineRate / 100, true));
+    };
+    AllNoteDirectionHandler.prototype.toString = function () {
+        return JSON.stringify(this);
+    };
+    var _d;
+    _d = AllNoteDirectionHandler;
+    AllNoteDirectionHandler.defaults = _d.instances(AllNoteDirectionHandler);
+    return AllNoteDirectionHandler;
+}(AbstractDirectionHandler));
+var Note = /** @class */ (function () {
+    function Note() {
+    }
+    Note.construct = function (description, scale) {
+        var note = new Note();
+        note.description = description;
+        note.scale = scale;
+        return note;
+    };
+    return Note;
+}());
+/** 注解绘制者 */
+var NotePainter = /** @class */ (function (_super) {
+    __extends(NotePainter, _super);
+    function NotePainter() {
+        var _this_1 = _super !== null && _super.apply(this, arguments) || this;
+        _this_1.anchorLineSize = 50; // 锚线宽/高
+        _this_1.markLineRate = 90; // 标线起始百分比
+        _this_1.elementSize = new Size(100, 50); // 元素宽/高
+        return _this_1;
+    }
+    NotePainter.instance = function (options) {
+        return Logger.proxyInstance(Object.assign(new NotePainter(), options));
+    };
+    NotePainter.drawScript = function (options) {
+        return this.instance({ direction: ComponentDirection[options.direction] })
+            .draw(Common.canvas(), Common.windowCenterPoint(), options.content);
+    };
+    NotePainter.prototype.draw = function (canvas, origin, note) {
+        var directionHandler = this.getDirectionHandler();
+        return NotePainter.draw(this, canvas, origin, directionHandler.getToAnchorLineStartPoint(this, origin, note.scale), note.description);
+    };
+    NotePainter.draw = function (painter, canvas, fromAnchorLineStartPoint, toAnchorLineStartPoint, content) {
+        var directionHandler = painter.getDirectionHandler();
+        var fromAnchorLine = Common.drawLine2(canvas, { points: [fromAnchorLineStartPoint, directionHandler.getAnchorLineEndPoint(painter, fromAnchorLineStartPoint)] });
+        var toAnchorLine = Common.drawLine2(canvas, { points: [toAnchorLineStartPoint, directionHandler.getAnchorLineEndPoint(painter, toAnchorLineStartPoint)] });
+        var markLine = Common.drawLine2(canvas, {
+            points: [directionHandler.getMarkLineStartPoint(painter, fromAnchorLineStartPoint), directionHandler.getMarkLineStartPoint(painter, toAnchorLineStartPoint)],
+            headType: "FilledArrow", tailType: "FilledArrow",
+        });
+        var textSolid = canvas.addText(content, Common.centerPoint(markLine.points));
+        textSolid.textSize = 12;
+        return new Group([fromAnchorLine, toAnchorLine, markLine, textSolid]);
+    };
+    NotePainter.prototype.getDirectionHandler = function () {
+        return AllNoteDirectionHandler.defaults[this.direction];
+    };
+    var _e;
+    _e = NotePainter;
+    NotePainter.defaults = _e.instance({});
+    return NotePainter;
+}(AbstractDirectionPainter));
+/** 提供空实现。 */
+var CollectionDirectionHandlerAdapter = /** @class */ (function () {
+    function CollectionDirectionHandlerAdapter() {
+    }
+    CollectionDirectionHandlerAdapter.prototype.prepare = function (painter, elements) {
+    };
+    CollectionDirectionHandlerAdapter.prototype.getNextOrigin = function (painter, origin) {
         return origin;
     };
-    return GroupDirectionHandlerAdapter;
+    return CollectionDirectionHandlerAdapter;
 }());
-/** 顺序的 */
-var SequentialGroupDirectionHandler = /** @class */ (function (_super) {
-    __extends(SequentialGroupDirectionHandler, _super);
-    function SequentialGroupDirectionHandler() {
-        return _super !== null && _super.apply(this, arguments) || this;
-    }
-    SequentialGroupDirectionHandler.defaults = new SequentialGroupDirectionHandler();
-    return SequentialGroupDirectionHandler;
-}(GroupDirectionHandlerAdapter));
-/** 逆序的 */
-var ReverseGroupDirectionHandler = /** @class */ (function (_super) {
-    __extends(ReverseGroupDirectionHandler, _super);
-    function ReverseGroupDirectionHandler() {
-        return _super !== null && _super.apply(this, arguments) || this;
-    }
-    /** 排序内存块集合 */
-    ReverseGroupDirectionHandler.prototype.order = function (blocks) {
-        blocks.reverse();
-    };
-    ReverseGroupDirectionHandler.defaults = new ReverseGroupDirectionHandler();
-    return ReverseGroupDirectionHandler;
-}(GroupDirectionHandlerAdapter));
-var HorizontalGroupDirectionHandler = /** @class */ (function (_super) {
-    __extends(HorizontalGroupDirectionHandler, _super);
-    function HorizontalGroupDirectionHandler() {
-        return _super !== null && _super.apply(this, arguments) || this;
-    }
-    HorizontalGroupDirectionHandler.prototype.getNextOrigin = function (painter, origin) {
-        return origin.add(new Point(painter.cellSize.width, 0));
-    };
-    HorizontalGroupDirectionHandler.defaults = new HorizontalGroupDirectionHandler();
-    return HorizontalGroupDirectionHandler;
-}(GroupDirectionHandlerAdapter));
-var VerticalGroupDirectionHandler = /** @class */ (function (_super) {
-    __extends(VerticalGroupDirectionHandler, _super);
-    function VerticalGroupDirectionHandler() {
-        return _super !== null && _super.apply(this, arguments) || this;
-    }
-    VerticalGroupDirectionHandler.prototype.getNextOrigin = function (painter, origin) {
-        return origin.add(new Point(0, painter.cellSize.height));
-    };
-    VerticalGroupDirectionHandler.defaults = new VerticalGroupDirectionHandler();
-    return VerticalGroupDirectionHandler;
-}(GroupDirectionHandlerAdapter));
-var CompositeGroupDirectionHandler = /** @class */ (function () {
-    function CompositeGroupDirectionHandler(orderHandler, axisHandler) {
+var CompositeCollectionDirectionHandler = /** @class */ (function () {
+    function CompositeCollectionDirectionHandler(orderHandler, axisHandler) {
         this.orderHandler = orderHandler;
         this.axisHandler = axisHandler;
     }
-    CompositeGroupDirectionHandler.prototype.order = function (elements) {
-        this.orderHandler.order(elements);
+    CompositeCollectionDirectionHandler.prototype.prepare = function (painter, elements) {
+        this.orderHandler.prepare(painter, elements);
     };
-    CompositeGroupDirectionHandler.prototype.getNextOrigin = function (painter, origin) {
+    CompositeCollectionDirectionHandler.prototype.getNextOrigin = function (painter, origin) {
         return this.axisHandler.getNextOrigin(painter, origin);
     };
-    return CompositeGroupDirectionHandler;
+    return CompositeCollectionDirectionHandler;
 }());
 /**
- * 组绘制者，绘制一组相关元素。
+ * 集合绘制者，绘制一组相关元素。
  *
  * @param <E> 元素类型
  */
-var GroupPainter = /** @class */ (function () {
-    function GroupPainter() {
-        this.cellSize = new Size(200, 20);
-        this.cellTextSize = 12;
-        this.cellFillColor = Color.RGB(1.0, 1.0, 0.75, null); // 黄色
-        this.direction = GroupDirection.UP_BOTTOM;
+var CollectionPainter = /** @class */ (function (_super) {
+    __extends(CollectionPainter, _super);
+    function CollectionPainter() {
+        return _super !== null && _super.apply(this, arguments) || this;
     }
-    GroupPainter.buildDirectionHandlers = function () {
-        var _a;
-        var directionHandlers = (_a = {},
-            _a[GroupDirection.LEFT_RIGHT] = new CompositeGroupDirectionHandler(SequentialGroupDirectionHandler.defaults, HorizontalGroupDirectionHandler.defaults),
-            _a[GroupDirection.RIGHT_LEFT] = new CompositeGroupDirectionHandler(ReverseGroupDirectionHandler.defaults, HorizontalGroupDirectionHandler.defaults),
-            _a[GroupDirection.UP_BOTTOM] = new CompositeGroupDirectionHandler(SequentialGroupDirectionHandler.defaults, VerticalGroupDirectionHandler.defaults),
-            _a[GroupDirection.BOTTOM_UP] = new CompositeGroupDirectionHandler(ReverseGroupDirectionHandler.defaults, VerticalGroupDirectionHandler.defaults),
-            _a);
-        Object.keys(directionHandlers).forEach(function (value, index) {
-            directionHandlers[value] = Logger.proxyInstance(directionHandlers[value]);
-        });
-        return directionHandlers;
-    };
     /**
      * 绘制。
      *
@@ -1333,38 +1444,45 @@ var GroupPainter = /** @class */ (function () {
      * @param content 内容
      * @return 形状
      */
-    GroupPainter.prototype.draw = function (canvas, origin, content) {
+    CollectionPainter.prototype.draw = function (canvas, origin, content) {
         var _this_1 = this;
         var directionHandler = this.getDirectionHandler();
-        directionHandler.order(content);
+        directionHandler.prepare(this, content);
         return new Group(content.map(function (text, index) {
             origin = index === 0 ? origin : directionHandler.getNextOrigin(_this_1, origin);
-            return _this_1.drawCell(canvas, origin, text);
+            return _this_1.drawElement(canvas, origin, text);
         }));
     };
-    GroupPainter.prototype.getDirectionHandler = function () {
-        return GroupPainter.directionHandlers[this.direction];
-    };
-    GroupPainter.directionHandlers = GroupPainter.buildDirectionHandlers();
-    GroupPainter.cellFillColors = {
-        "[anon]": Color.RGB(0.75, 1.0, 0.75, null),
-        "": Color.RGB(0.8, 0.8, 0.8, null),
-        "*": Color.RGB(0.75, 1.0, 1.0, null), // 蓝色，有效数据
-    };
-    return GroupPainter;
-}());
-/**
- * 组绘制者，绘制一组相关元素。
- *
- * @param <E> 元素类型
- */
-var StringGroupPainter = /** @class */ (function (_super) {
-    __extends(StringGroupPainter, _super);
-    function StringGroupPainter() {
+    return CollectionPainter;
+}(AbstractDirectionPainter));
+var AllRectCollectionDirectionHandler = /** @class */ (function (_super) {
+    __extends(AllRectCollectionDirectionHandler, _super);
+    function AllRectCollectionDirectionHandler() {
         return _super !== null && _super.apply(this, arguments) || this;
     }
-    StringGroupPainter.instance = function (options) {
-        return Logger.proxyInstance(Object.assign(new StringGroupPainter(), options));
+    AllRectCollectionDirectionHandler.prototype.prepare = function (painter, elements) {
+        !this.direction.isSequential() && elements.reverse();
+    };
+    AllRectCollectionDirectionHandler.prototype.getNextOrigin = function (painter, origin) {
+        return origin.add(this.direction.offsetAxisSize(painter.elementSize));
+    };
+    var _f;
+    _f = AllRectCollectionDirectionHandler;
+    AllRectCollectionDirectionHandler.defaults = _f.instances(AllRectCollectionDirectionHandler);
+    return AllRectCollectionDirectionHandler;
+}(AbstractDirectionHandler));
+/** 矩阵集合绘制者 */
+var RectCollectionPainter = /** @class */ (function (_super) {
+    __extends(RectCollectionPainter, _super);
+    function RectCollectionPainter() {
+        var _this_1 = _super !== null && _super.apply(this, arguments) || this;
+        _this_1.elementSize = new Size(200, 20);
+        _this_1.elementTextSize = 12;
+        _this_1.elementFillColor = Color.RGB(1.0, 1.0, 0.75, null); // 黄色
+        return _this_1;
+    }
+    RectCollectionPainter.instance = function (options) {
+        return Logger.proxyInstance(Object.assign(new RectCollectionPainter(), options));
     };
     /**
      * 绘制地址空间布局。
@@ -1373,31 +1491,31 @@ var StringGroupPainter = /** @class */ (function (_super) {
      * @param origin 起点
      * @return 虚拟内存图
      */
-    StringGroupPainter.draw = function (canvas, origin) {
+    RectCollectionPainter.draw = function (canvas, origin) {
         var _this_1 = this;
         if (canvas === void 0) { canvas = Common.canvas(); }
         if (origin === void 0) { origin = Common.windowCenterPoint(); }
         var canvasName = canvas.name;
-        var painter = StringGroupPainter.canvasCache[canvasName];
+        var painter = RectCollectionPainter.canvasCache[canvasName];
         // shift 强制重新配置
         if (app.shiftKeyDown || !painter) {
             var form = new Form();
-            form.addField(new Form.Field.Option(this.modeKey, "绘制模式", Enum.values(GroupDirection), Enum.keys(GroupDirection), this.modeValue, null), 0);
-            return form.show("配置地址空间绘制参数", "确定")
+            form.addField(new Form.Field.Option(this.modeKey, "绘制模式", Enum.values(ComponentDirection), Enum.keys(ComponentDirection), this.modeValue, null), 0);
+            return form.show("配置矩阵参数", "确定")
                 .then(function (response) {
                 painter = _this_1.instance({ direction: response.values[_this_1.modeKey] });
-                StringGroupPainter.canvasCache[canvasName] = painter;
+                RectCollectionPainter.canvasCache[canvasName] = painter;
                 painter.drawInteractively(canvas, origin);
             })
                 .catch(function (response) { return Logger.getLogger().error("error:", response); });
         }
         // option 重新选择文件
         if (app.optionKeyDown)
-            Common.option(canvas, MemoryPainter.drawMemoryLocationKey, null);
+            Common.option(canvas, this.locationKey, null);
         return painter.drawInteractively(canvas, origin);
     };
-    StringGroupPainter.drawScript = function (options) {
-        return this.instance(__assign(__assign({}, options), { direction: GroupDirection[options.direction] }))
+    RectCollectionPainter.drawScript = function (options) {
+        return this.instance({ direction: ComponentDirection[options.direction] })
             .draw(Common.canvas(), Common.windowCenterPoint(), options.content);
     };
     /**
@@ -1405,55 +1523,147 @@ var StringGroupPainter = /** @class */ (function (_super) {
      *
      * @param canvas 画布
      * @param origin 起点
-     * @param [content] 内容
-     * @return 虚拟内存图
+     * @return 组图
      */
-    StringGroupPainter.prototype.drawInteractively = function (canvas, origin, content) {
+    RectCollectionPainter.prototype.drawInteractively = function (canvas, origin) {
         var _this_1 = this;
-        if (canvas === void 0) { canvas = Common.canvas(); }
-        if (origin === void 0) { origin = Common.windowCenterPoint(); }
-        return Common.readFileContentSelectively(canvas, StringGroupPainter.locationKey, content)
-            .then(function (response) {
-            return JSON.parse(response.data);
-        })
-            .then(function (response) { return _this_1.draw(canvas, origin, response); })
+        return Common.readFileContentAssociatively(canvas, RectCollectionPainter.locationKey)
+            .then(function (response) { return _this_1.draw(canvas, origin, JSON.parse(response.data)); })
             .catch(function (response) { return Logger.getLogger().error(response); });
+    };
+    RectCollectionPainter.prototype.getDirectionHandler = function () {
+        return AllRectCollectionDirectionHandler.defaults[this.direction];
     };
     /**
      * 绘制单元格。
      *
      * @param canvas 画布
      * @param origin 起点
-     * @param text 文本
+     * @param content 内容
      * @return 形状
      */
-    StringGroupPainter.prototype.drawCell = function (canvas, origin, text) {
+    RectCollectionPainter.prototype.drawElement = function (canvas, origin, content) {
         var shape = canvas.newShape();
-        shape.geometry = new Rect(origin.x, origin.y, this.cellSize.width, this.cellSize.height);
+        shape.geometry = new Rect(origin.x, origin.y, this.elementSize.width, this.elementSize.height);
         shape.shadowColor = null;
-        this.cellTextSize && (shape.textSize = this.cellTextSize);
-        this.cellFillColor = StringGroupPainter.cellFillColors[text || ""] || StringGroupPainter.cellFillColors["*"];
-        this.cellFillColor && (shape.fillColor = this.cellFillColor);
-        text && (shape.text = text);
+        this.elementTextSize && (shape.textSize = this.elementTextSize);
+        this.elementFillColor = RectCollectionPainter.elementFillColors[content || ""] || RectCollectionPainter.elementFillColors["*"];
+        this.elementFillColor && (shape.fillColor = this.elementFillColor);
+        content && (shape.text = content);
         shape.magnets = Common.magnets_6;
         return shape;
     };
-    var _c;
-    _c = StringGroupPainter;
-    /** 倾向于水平绘图，宽度调小 */
-    StringGroupPainter.horizontal = StringGroupPainter.instance({ cellSize: new Size(150, 20) });
-    StringGroupPainter.vertical = StringGroupPainter.instance({ cellSize: new Size(200, 20) });
-    StringGroupPainter.defaults = _c.horizontal;
+    var _g;
+    _g = RectCollectionPainter;
+    RectCollectionPainter.horizontal = RectCollectionPainter.instance({ elementSize: new Size(150, 20) });
+    RectCollectionPainter.vertical = RectCollectionPainter.instance({ elementSize: new Size(200, 20) });
+    RectCollectionPainter.defaults = _g.horizontal;
+    RectCollectionPainter.elementFillColors = {
+        "[anon]": Color.RGB(0.75, 1.0, 0.75, null),
+        "": Color.RGB(0.8, 0.8, 0.8, null),
+        "*": Color.RGB(0.75, 1.0, 1.0, null), // 蓝色，有效数据
+    };
     /** 缓存每个 canvas 使用的 Painter */
-    StringGroupPainter.canvasCache = {};
+    RectCollectionPainter.canvasCache = {};
     /** 绘制模式-键 */
-    StringGroupPainter.modeKey = "mode";
+    RectCollectionPainter.modeKey = "mode";
     /** 绘制模式-默认值*/
-    StringGroupPainter.modeValue = GroupDirection.BOTTOM_UP;
+    RectCollectionPainter.modeValue = ComponentDirection.BOTTOM_UP;
     /** 文件位置键 */
-    StringGroupPainter.locationKey = _c.name;
-    return StringGroupPainter;
-}(GroupPainter));
+    RectCollectionPainter.locationKey = _g.name;
+    return RectCollectionPainter;
+}(CollectionPainter));
+var RectNote = /** @class */ (function () {
+    function RectNote() {
+    }
+    RectNote.prototype.toString = function () {
+        return JSON.stringify(this);
+    };
+    return RectNote;
+}());
+var NoteRectCollection = /** @class */ (function () {
+    function NoteRectCollection() {
+    }
+    return NoteRectCollection;
+}());
+var AllNoteRectCollectionDirectionHandler = /** @class */ (function (_super) {
+    __extends(AllNoteRectCollectionDirectionHandler, _super);
+    function AllNoteRectCollectionDirectionHandler() {
+        return _super !== null && _super.apply(this, arguments) || this;
+    }
+    AllNoteRectCollectionDirectionHandler.prototype.prepare = function (painter, noteRectCollection) {
+        if (this.direction.isSequential())
+            return;
+        var length = noteRectCollection.elements.length;
+        noteRectCollection.notes.forEach(function (notes) {
+            notes.forEach(function (note) {
+                note.start = length - note.start;
+                note.end = length - note.end;
+            });
+        });
+    };
+    AllNoteRectCollectionDirectionHandler.prototype.getNoteStartPoint = function (painter, elementStartPoint) {
+        return elementStartPoint.add(this.direction.offsetAxisSize(painter.rectCollectionPainter.elementSize, true));
+    };
+    AllNoteRectCollectionDirectionHandler.prototype.getAnchorLineStartPoint = function (painter, noteStartPoint, note) {
+        return noteStartPoint.add(this.direction.offsetAxisSize(painter.rectCollectionPainter.elementSize).scale(note.start));
+    };
+    var _h;
+    _h = AllNoteRectCollectionDirectionHandler;
+    AllNoteRectCollectionDirectionHandler.defaults = _h.instances(AllNoteRectCollectionDirectionHandler);
+    return AllNoteRectCollectionDirectionHandler;
+}(AbstractDirectionHandler));
+var NoteRectCollectionPainter = /** @class */ (function (_super) {
+    __extends(NoteRectCollectionPainter, _super);
+    function NoteRectCollectionPainter() {
+        var _this_1 = _super !== null && _super.apply(this, arguments) || this;
+        _this_1.rectCollectionPainter = RectCollectionPainter.instance({});
+        _this_1.notePainter = NotePainter.instance({});
+        return _this_1;
+    }
+    NoteRectCollectionPainter.instance = function (options) {
+        var instance = Object.assign(new NoteRectCollectionPainter(), options);
+        instance.setDirection(options.direction);
+        instance.notePainter.elementSize = instance.rectCollectionPainter.elementSize;
+        return Logger.proxyInstance(instance);
+    };
+    NoteRectCollectionPainter.drawScript = function (options) {
+        return this.instance(__assign(__assign({}, options), { direction: ComponentDirection[options.direction] }))
+            .draw(Common.canvas(), Common.windowCenterPoint(), options.content);
+    };
+    NoteRectCollectionPainter.prototype.draw = function (canvas, origin, noteRectCollection) {
+        var rectCollectionGroup = this.rectCollectionPainter.draw(canvas, origin, noteRectCollection.elements);
+        var directionHandler = this.getDirectionHandler();
+        var noteStartPoint = directionHandler.getNoteStartPoint(this, origin);
+        directionHandler.prepare(this, noteRectCollection);
+        var notesGroup = new Group(this.drawNoteGroups(canvas, noteStartPoint, noteRectCollection));
+        return new Group([rectCollectionGroup, notesGroup]);
+    };
+    NoteRectCollectionPainter.prototype.drawNoteGroups = function (canvas, noteStartPoint, noteRectCollection) {
+        var _this_1 = this;
+        return noteRectCollection.notes.map(function (notes) {
+            _this_1.notePainter.anchorLineSize *= 2;
+            return _this_1.drawNoteGroup(canvas, noteStartPoint, notes);
+        });
+    };
+    NoteRectCollectionPainter.prototype.drawNoteGroup = function (canvas, noteStartPoint, notes) {
+        var _this_1 = this;
+        var directionHandler = this.getDirectionHandler();
+        return new Group(notes.map(function (note) {
+            var anchorLineStartPoint = directionHandler.getAnchorLineStartPoint(_this_1, noteStartPoint, note);
+            return _this_1.notePainter.draw(canvas, anchorLineStartPoint, Note.construct(note.description, Math.abs(note.end - note.start) + 1));
+        }));
+    };
+    NoteRectCollectionPainter.prototype.setDirection = function (direction) {
+        _super.prototype.setDirection.call(this, direction);
+        this.rectCollectionPainter.setDirection(direction);
+        this.notePainter.setDirection(direction);
+    };
+    NoteRectCollectionPainter.prototype.getDirectionHandler = function () {
+        return AllNoteRectCollectionDirectionHandler.defaults[this.direction];
+    };
+    return NoteRectCollectionPainter;
+}(AbstractDirectionPainter));
 var ClassDiagram = /** @class */ (function () {
     function ClassDiagram() {
     }
@@ -1461,6 +1671,10 @@ var ClassDiagram = /** @class */ (function () {
         var classDiagram = Object.assign(new ClassDiagram(), content);
         classDiagram.entities = content.entities.map(function (item) { return Entity.parse(item); });
         return classDiagram;
+    };
+    ClassDiagram.prototype.toString = function () {
+        var _a;
+        return JSON.stringify(__assign(__assign({}, this), { entities: (_a = this.entities) === null || _a === void 0 ? void 0 : _a.length }));
     };
     return ClassDiagram;
 }());
@@ -1518,7 +1732,7 @@ var InstanceProperty = /** @class */ (function () {
 }());
 var ClassDiagramPainter = /** @class */ (function () {
     function ClassDiagramPainter() {
-        this.table = StringGroupPainter.defaults;
+        this.table = RectCollectionPainter.defaults;
         this.offset = new Size(100, 100);
     }
     /** 插件入口 */
@@ -1550,8 +1764,8 @@ var ClassDiagramPainter = /** @class */ (function () {
         var _this_1 = this;
         ClassDiagramPainter.resetCache(classDiagram.entities);
         // 水平方法绘制实体类
-        var increase = new Point(this.table.cellSize.width + this.offset.width, 0);
-        // let increase: Point = new Point(0, this.table.cellSize.height + this.offset.height);
+        var increase = new Point(this.table.elementSize.width + this.offset.width, 0);
+        // let increase: Point = new Point(0, this.table.elementSize.height + this.offset.height);
         var entities = classDiagram.entities;
         if (classDiagram.entry)
             entities = classDiagram.entities.filter(function (item) { return item.name == classDiagram.entry; });
@@ -1564,7 +1778,7 @@ var ClassDiagramPainter = /** @class */ (function () {
     };
     ClassDiagramPainter.prototype.drawEntity = function (canvas, origin, entity) {
         var _this_1 = this;
-        var increase = new Point(0, this.table.cellSize.height);
+        var increase = new Point(0, this.table.elementSize.height);
         var header = this.drawHeader(canvas, origin, entity.name);
         var properties = entity.properties.map(function (property, index) {
             return _this_1.drawProperty(canvas, origin = origin.add(increase), property);
@@ -1572,15 +1786,15 @@ var ClassDiagramPainter = /** @class */ (function () {
         return new Group(__spreadArray([header], properties, true));
     };
     ClassDiagramPainter.prototype.drawHeader = function (canvas, origin, name) {
-        var header = this.table.drawCell(canvas, origin, name);
+        var header = this.table.drawElement(canvas, origin, name);
         Common.bolder(header);
         return header;
     };
     ClassDiagramPainter.prototype.drawProperty = function (canvas, origin, property) {
-        var cell = this.table.drawCell(canvas, origin, "".concat(property.type, ":").concat(property.name));
-        cell.textHorizontalAlignment = HorizontalTextAlignment.Left;
-        this.drawPropertyRef(canvas, origin, cell, property);
-        return cell;
+        var element = this.table.drawElement(canvas, origin, "".concat(property.type, ":").concat(property.name));
+        element.textHorizontalAlignment = HorizontalTextAlignment.Left;
+        this.drawPropertyRef(canvas, origin, element, property);
+        return element;
     };
     ClassDiagramPainter.prototype.drawPropertyRef = function (canvas, origin, propertyCell, property) {
         var _this_1 = this;
@@ -1589,7 +1803,7 @@ var ClassDiagramPainter = /** @class */ (function () {
         var entity = ClassDiagramPainter.entities.find(function (item) { return item.name == property.ref; });
         if (!entity)
             return;
-        origin = origin.add(new Point(this.table.cellSize.width + this.offset.width, 0));
+        origin = origin.add(new Point(this.table.elementSize.width + this.offset.width, 0));
         var entityGroup = ClassDiagramPainter.invokeCachely(entity.name, function () { return _this_1.drawEntity(canvas, origin, entity); });
         var entityHeader = entityGroup.graphics[entityGroup.graphics.length - 1];
         var line = canvas.connect(propertyCell, entityHeader);
@@ -1852,10 +2066,10 @@ var MemoryHorizontalHandler = /** @class */ (function (_super) {
         return _super !== null && _super.apply(this, arguments) || this;
     }
     MemoryHorizontalHandler.prototype.getNextOrigin = function (painter, origin) {
-        return origin.add(new Point(painter.table.cellSize.width, 0));
+        return origin.add(new Point(painter.table.elementSize.width, 0));
     };
     MemoryHorizontalHandler.prototype.getAddressLineOrigin = function (painter, origin) {
-        return origin.add(new Point(0, painter.table.cellSize.height));
+        return origin.add(new Point(0, painter.table.elementSize.height));
     };
     MemoryHorizontalHandler.prototype.getAddressLineEndpoint = function (painter, origin) {
         return origin.add(new Point(0, painter.addressLineLength));
@@ -1872,7 +2086,7 @@ var MemoryVerticalHandler = /** @class */ (function (_super) {
         return _super !== null && _super.apply(this, arguments) || this;
     }
     MemoryVerticalHandler.prototype.getNextOrigin = function (painter, origin) {
-        return origin.add(new Point(0, painter.table.cellSize.height));
+        return origin.add(new Point(0, painter.table.elementSize.height));
     };
     MemoryVerticalHandler.prototype.getAddressLineEndpoint = function (painter, origin) {
         return origin.subtract(new Point(painter.addressLineLength, 0));
@@ -1942,8 +2156,8 @@ var BottomUpHandler = /** @class */ (function (_super) {
 /** 内存画师 */
 var MemoryPainter = /** @class */ (function () {
     function MemoryPainter() {
-        this.table = StringGroupPainter.defaults;
-        this.direction = GroupDirection.BOTTOM_UP; //绘制方向
+        this.table = RectCollectionPainter.defaults;
+        this.direction = ComponentDirection.BOTTOM_UP; //绘制方向
         this.showAddress = true; // 是否显示地址
         this.addressLineLength = 50;
         this.addressLabelSize = new Size(150, 20);
@@ -1961,7 +2175,7 @@ var MemoryPainter = /** @class */ (function () {
     };
     MemoryPainter.instanceHorizontal = function (options) {
         var painter = new MemoryPainter();
-        painter.table = StringGroupPainter.horizontal;
+        painter.table = RectCollectionPainter.horizontal;
         painter.addressLineLength = 25;
         painter.addressLabelTextBase = 10;
         painter.showSize = false;
@@ -1970,10 +2184,10 @@ var MemoryPainter = /** @class */ (function () {
     MemoryPainter.buildDirectionHandlers = function () {
         var _a;
         var directionHandlers = (_a = {},
-            _a[GroupDirection.LEFT_RIGHT] = new LeftRightHandler(),
-            _a[GroupDirection.RIGHT_LEFT] = new RightLeftHandler(),
-            _a[GroupDirection.UP_BOTTOM] = new UpBottomHandler(),
-            _a[GroupDirection.BOTTOM_UP] = new BottomUpHandler(),
+            _a[ComponentDirection.LEFT_RIGHT] = new LeftRightHandler(),
+            _a[ComponentDirection.RIGHT_LEFT] = new RightLeftHandler(),
+            _a[ComponentDirection.UP_BOTTOM] = new UpBottomHandler(),
+            _a[ComponentDirection.BOTTOM_UP] = new BottomUpHandler(),
             _a);
         Object.keys(directionHandlers).forEach(function (value, index) {
             directionHandlers[value] = Logger.proxyInstance(directionHandlers[value]);
@@ -1999,13 +2213,13 @@ var MemoryPainter = /** @class */ (function () {
         // shift 强制重新配置
         if (app.shiftKeyDown || !memory) {
             var form = new Form();
-            form.addField(new Form.Field.Option(this.modeKey, "绘制模式", Enum.values(GroupDirection), Enum.keys(GroupDirection), this.modeValue, null), 0);
+            form.addField(new Form.Field.Option(this.modeKey, "绘制模式", Enum.values(ComponentDirection), Enum.keys(ComponentDirection), this.modeValue, null), 0);
             return form.show("配置地址空间绘制参数", "确定")
                 .then(function (response) {
                 // Logger.getLogger().debug("form: ", response.values); // error
                 Logger.getLogger().debug("modeKey: ", response.values[_this_1.modeKey]);
-                Logger.getLogger().debug("GroupDirection: ", GroupDirection[response.values[_this_1.modeKey]]);
-                memory = MemoryPainter[GroupDirection[response.values[_this_1.modeKey]]];
+                Logger.getLogger().debug("ComponentDirection: ", ComponentDirection[response.values[_this_1.modeKey]]);
+                memory = MemoryPainter[ComponentDirection[response.values[_this_1.modeKey]]];
                 Logger.getLogger().debug("direction: ", memory.direction);
                 MemoryPainter.canvasCache[canvasName] = memory;
                 memory.drawMemoryInteractively(canvas, origin);
@@ -2018,7 +2232,7 @@ var MemoryPainter = /** @class */ (function () {
         return memory.drawMemoryInteractively(canvas, origin);
     };
     MemoryPainter.drawScript = function (_a) {
-        var _b = _a.direction, direction = _b === void 0 ? GroupDirection[GroupDirection.BOTTOM_UP] : _b, _d = _a.type, type = _d === void 0 ? "json" : _d, content = _a.content;
+        var _b = _a.direction, direction = _b === void 0 ? ComponentDirection[ComponentDirection.BOTTOM_UP] : _b, _j = _a.type, type = _j === void 0 ? "json" : _j, content = _a.content;
         return this[direction].drawMemoryBlocks(Common.canvas(), Common.windowCenterPoint(), MemoryBlock.parse(content, type));
     };
     /**
@@ -2054,7 +2268,7 @@ var MemoryPainter = /** @class */ (function () {
     MemoryPainter.prototype.drawTitle = function (canvas, origin, title) {
         var solid = canvas.addText(title, origin);
         Common.bolder(solid);
-        solid.textSize = this.table.cellTextSize + 2;
+        solid.textSize = this.table.elementTextSize + 2;
         return solid;
     };
     /**
@@ -2075,9 +2289,9 @@ var MemoryPainter = /** @class */ (function () {
                 origin = _this_1.getDirectionHandler().getNextOrigin(_this_1, origin);
             // let prev = blocks[index - 1], curr = blocks[index];
             // if (prev.endAddress < curr.startAddress) {
-            //   origin = origin.subtract(new Point(0, this.table.cellSize.height));
+            //   origin = origin.subtract(new Point(0, this.table.elementSize.height));
             // } else if (prev.endAddress > curr.startAddress) {
-            //   origin = origin.add(new Point(0, this.table.cellSize.height / 2));
+            //   origin = origin.add(new Point(0, this.table.elementSize.height / 2));
             // }
             return _this_1.drawMemoryBlock(canvas, origin, block);
         });
@@ -2092,10 +2306,10 @@ var MemoryPainter = /** @class */ (function () {
      * @return  绘制的图形
      */
     MemoryPainter.prototype.drawMemoryBlock = function (canvas, origin, block) {
-        var cell = this.table.drawCell(canvas, origin, block.description);
+        var element = this.table.drawElement(canvas, origin, block.description);
         var directionHandler = this.getDirectionHandler();
         var endpoint = directionHandler.getNextOrigin(this, origin);
-        var graphics = [cell];
+        var graphics = [element];
         if (this.showAddress) {
             block.endAddress != null && graphics.push(this.drawMemoryAddress(canvas, origin, directionHandler.getAddressStartValue(this, block)));
             block.startAddress != null && graphics.push(this.drawMemoryAddress(canvas, endpoint, directionHandler.getAddressEndValue(this, block)));
@@ -2105,7 +2319,7 @@ var MemoryPainter = /** @class */ (function () {
             if (this.sizeStyle === 'outer')
                 graphics.push(this.drawMemorySize(canvas, endpoint, size));
             else
-                cell.text += " (".concat(Common.formatMemorySize(size), ")");
+                element.text += " (".concat(Common.formatMemorySize(size), ")");
         }
         return new Group(graphics);
     };
@@ -2126,7 +2340,7 @@ var MemoryPainter = /** @class */ (function () {
         var labelOrigin = this.getDirectionHandler().getAddressLabelOrigin(this, line.points[1]);
         var label = canvas.addText(formattedAddress, labelOrigin);
         label.magnets = Common.magnets_6;
-        this.table.cellTextSize && (label.textSize = this.table.cellTextSize);
+        this.table.elementTextSize && (label.textSize = this.table.elementTextSize);
         return new Group([line, label]);
     };
     /**
@@ -2155,7 +2369,7 @@ var MemoryPainter = /** @class */ (function () {
         var upLine = canvas.newLine();
         upLine.shadowColor = null;
         var upLineStartPoint = new Point(origin.x - this.addressLineLength - this.addressLabelSize.width / 2, origin.y + this.addressLabelSize.height / 2);
-        var upLineEndPoint = new Point(upLineStartPoint.x, upLineStartPoint.y + this.table.cellSize.height / 2 - this.addressLabelSize.height);
+        var upLineEndPoint = new Point(upLineStartPoint.x, upLineStartPoint.y + this.table.elementSize.height / 2 - this.addressLabelSize.height);
         upLine.points = [upLineStartPoint, upLineEndPoint];
         upLine.headType = "FilledArrow";
         var label = canvas.newShape();
@@ -2168,23 +2382,23 @@ var MemoryPainter = /** @class */ (function () {
         label.textHorizontalAlignment = HorizontalTextAlignment.Center;
         var bottomLine = canvas.newLine();
         bottomLine.shadowColor = null;
-        var bottomLineStartPoint = new Point(upLineStartPoint.x, origin.y + this.table.cellSize.height - this.addressLabelSize.height / 2);
-        var bottomLineEndPoint = new Point(bottomLineStartPoint.x, bottomLineStartPoint.y - this.table.cellSize.height / 2 + this.addressLabelSize.height);
+        var bottomLineStartPoint = new Point(upLineStartPoint.x, origin.y + this.table.elementSize.height - this.addressLabelSize.height / 2);
+        var bottomLineEndPoint = new Point(bottomLineStartPoint.x, bottomLineStartPoint.y - this.table.elementSize.height / 2 + this.addressLabelSize.height);
         bottomLine.points = [bottomLineStartPoint, bottomLineEndPoint];
         bottomLine.headType = "FilledArrow";
         return new Group([upLine, label, bottomLine]);
     };
-    MemoryPainter.LEFT_RIGHT = MemoryPainter.instanceHorizontal({ direction: GroupDirection.LEFT_RIGHT });
-    MemoryPainter.RIGHT_LEFT = MemoryPainter.instanceHorizontal({ direction: GroupDirection.RIGHT_LEFT });
-    MemoryPainter.UP_BOTTOM = MemoryPainter.instance({ direction: GroupDirection.UP_BOTTOM });
-    MemoryPainter.BOTTOM_UP = MemoryPainter.instance({ direction: GroupDirection.BOTTOM_UP });
+    MemoryPainter.LEFT_RIGHT = MemoryPainter.instanceHorizontal({ direction: ComponentDirection.LEFT_RIGHT });
+    MemoryPainter.RIGHT_LEFT = MemoryPainter.instanceHorizontal({ direction: ComponentDirection.RIGHT_LEFT });
+    MemoryPainter.UP_BOTTOM = MemoryPainter.instance({ direction: ComponentDirection.UP_BOTTOM });
+    MemoryPainter.BOTTOM_UP = MemoryPainter.instance({ direction: ComponentDirection.BOTTOM_UP });
     MemoryPainter.directionHandlers = MemoryPainter.buildDirectionHandlers();
     /** 缓存每个 canvas 使用的 MemoryPainter */
     MemoryPainter.canvasCache = {};
     /** 绘制模式-键 */
     MemoryPainter.modeKey = "mode";
     /** 绘制模式-默认值*/
-    MemoryPainter.modeValue = GroupDirection.BOTTOM_UP;
+    MemoryPainter.modeValue = ComponentDirection.BOTTOM_UP;
     MemoryPainter.drawMemoryLocationKey = "drawMemoryLocation";
     return MemoryPainter;
 }());
@@ -2196,7 +2410,8 @@ var _this = (function () { return this; })();
 (function () {
     var library = new PlugIn.Library(new Version("0.1"));
     [Common,
-        GroupPainter, StringGroupPainter,
+        NotePainter,
+        CollectionPainter, RectCollectionPainter, NoteRectCollectionPainter,
         Memory, MemoryBlock, MemoryPainter,
         ClassDiagram, Entity, EntityProperty, ClassDiagramPainter,
         Stepper, LayerSwitcher]
