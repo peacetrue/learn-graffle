@@ -767,7 +767,7 @@ class Common {
 
 /**
  * 枚举，key 为名称，value 为索引，即针对后 3 项
- * MemoryDirection：{0: "BOTTOM_UP", 1: "LEFT_RIGHT", 2: "RIGHT_LEFT", BOTTOM_UP: 0, LEFT_RIGHT: 1, RIGHT_LEFT: 2}
+ * GroupDirection：{0: "BOTTOM_UP", 1: "LEFT_RIGHT", 2: "RIGHT_LEFT", BOTTOM_UP: 0, LEFT_RIGHT: 1, RIGHT_LEFT: 2}
  */
 class Enum {
   public static view(enums: Record<string | number, number | string>) {
@@ -779,7 +779,7 @@ class Enum {
 
   /**
    * 获取 键 集合，键是枚举名称。
-   * Object.keys(MemoryDirection)：0,1,2,3,LEFT_RIGHT,RIGHT_LEFT,UP_BOTTOM,BOTTOM_UP
+   * Object.keys(GroupDirection)：0,1,2,3,LEFT_RIGHT,RIGHT_LEFT,UP_BOTTOM,BOTTOM_UP
    */
   public static keys(enums: Record<string | number, number | string>) {
     let keys = Object.keys(enums);
@@ -788,7 +788,7 @@ class Enum {
 
   /**
    * 获取 值 集合，值是枚举索引
-   * Object.values(MemoryDirection)：LEFT_RIGHT,RIGHT_LEFT,UP_BOTTOM,BOTTOM_UP,0,1,2,3
+   * Object.values(GroupDirection)：LEFT_RIGHT,RIGHT_LEFT,UP_BOTTOM,BOTTOM_UP,0,1,2,3
    */
   public static values(enums: Record<string | number, number | string>) {
     let keys = Object.values(enums);
@@ -1214,36 +1214,7 @@ class LayerSwitcher {
   }
 }
 
-class PeaceTable {
-
-  public static defaults: PeaceTable = PeaceTable.instance(
-    new Size(200, 70), 12, Color.RGB(1.0, 1.0, 0.75, null)
-  );
-  public static small: PeaceTable = PeaceTable.instance(
-    new Size(200, 20), 12, Color.RGB(1.0, 1.0, 0.75, null)
-  );
-  /** 倾向于水平绘图，宽度调小 */
-  public static horizontal: PeaceTable = PeaceTable.instance(
-    new Size(150, 20), 12, Color.RGB(1.0, 1.0, 0.75, null)
-  );
-
-  public static cellFillColors: Record<string, Color> = {
-    "[anon]": Color.RGB(0.75, 1.0, 0.75, null),// 浅绿，已占用但不知道具体用途
-    "": Color.RGB(0.8, 0.8, 0.8, null),        // 灰色，无描述表示未使用
-    "*": Color.RGB(0.75, 1.0, 1.0, null),      // 蓝色，有效数据
-  };
-  public cellSize: Size = new Size(200, 70);
-  public cellTextSize: number = 12;
-  public cellFillColor: Color = Color.RGB(1.0, 1.0, 0.75, null);// 黄色
-
-  public static instance(cellSize: Size, cellTextSize: number, cellFillColor: Color) {
-    let table = new PeaceTable();
-    table.cellSize = cellSize;
-    table.cellTextSize = cellTextSize;
-    table.cellFillColor = cellFillColor;
-    return Logger.proxyInstance(table);
-  }
-
+class TablePainter {
   /**
    * 绘制表格。
    *
@@ -1253,7 +1224,7 @@ class PeaceTable {
    * @return 形状
    */
   public drawTable(canvas: Canvas, origin: Point, texts: string[][]): Group {
-    let increase = new Point(0, this.cellSize.height);
+    let increase = new Point(0, 0);
     return new Group(
       texts.map((item, index) => {
         origin = index === 0 ? origin : origin = origin.add(increase);
@@ -1271,47 +1242,9 @@ class PeaceTable {
    * @return 形状
    */
   public drawRow(canvas: Canvas, origin: Point, texts: string[]): Group {
-    let increase = new Point(this.cellSize.width, 0);
-    return new Group(texts.map((text, index) => {
-      return this.drawCell(canvas, index === 0 ? origin : origin = origin.add(increase), text);
-    }));
+    return undefined;
   }
 
-
-  /**
-   * 绘制列。
-   *
-   * @param canvas 画布
-   * @param origin 起点
-   * @param texts 文本
-   * @return 形状
-   */
-  public drawColumn(canvas: Canvas, origin: Point, texts: string[]): Group {
-    let increase = new Point(0, this.cellSize.height);
-    return new Group(texts.map((text, index) => {
-      return this.drawCell(canvas, index === 0 ? origin : origin = origin.add(increase), text);
-    }));
-  }
-
-  /**
-   * 绘制单元格。
-   *
-   * @param canvas 画布
-   * @param origin 起点
-   * @param text 文本
-   * @return 形状
-   */
-  public drawCell(canvas: Canvas, origin: Point, text?: string): Shape {
-    let shape = canvas.newShape();
-    shape.geometry = new Rect(origin.x, origin.y, this.cellSize.width, this.cellSize.height);
-    shape.shadowColor = null;
-    this.cellTextSize && (shape.textSize = this.cellTextSize);
-    this.cellFillColor = PeaceTable.cellFillColors[text || ""] || PeaceTable.cellFillColors["*"];
-    this.cellFillColor && (shape.fillColor = this.cellFillColor);
-    text && (shape.text = text);
-    shape.magnets = Common.magnets_6;
-    return shape;
-  }
 
   public static extractGraphicTexts(graphic: Graphic | Graphic[]): any[] {
     let texts: object[] = [];
@@ -1351,6 +1284,256 @@ class PeaceTable {
   public static extractSolidText(solid: Solid): string {
     return solid.text;
   }
+}
+
+/**
+ * 组方向即数据展示方向。
+ * 绘图方向始终是从上向下，数据展示方向则有多种可能。
+ * 内存块集合传入时约定为升序排列（无序会自动排序），
+ * 通过控制内存块集合的排序（升序/降序），可以控制内存的显示方向
+ */
+enum GroupDirection {
+  LEFT_RIGHT,//从左往右
+  RIGHT_LEFT,//从右往左，每个地址都对应一个字节，字节内部各标志位使用情况；eflags 寄存器各标志位使用情况
+  UP_BOTTOM,//从上往下
+  BOTTOM_UP,//从下往上，虚拟地址空间图
+}
+
+/** 处理与组方向相关的内容 */
+interface GroupDirectionHandler {
+
+  /** 排序元素集合 */
+  order(elements: any[]): void;
+
+  /** 获取下一个元素起点 */
+  getNextOrigin(painter: GroupPainter<any>, origin: Point): Point;
+}
+
+/** 提供空实现。 */
+class GroupDirectionHandlerAdapter implements GroupDirectionHandler {
+
+  order(blocks: any[]): void {
+  }
+
+  getNextOrigin(painter: GroupPainter<any>, origin: Point): Point {
+    return origin;
+  }
+
+}
+
+/** 顺序的 */
+class SequentialGroupDirectionHandler extends GroupDirectionHandlerAdapter {
+
+  public static defaults: SequentialGroupDirectionHandler = new SequentialGroupDirectionHandler();
+
+}
+
+/** 逆序的 */
+class ReverseGroupDirectionHandler extends GroupDirectionHandlerAdapter {
+
+  public static defaults: ReverseGroupDirectionHandler = new ReverseGroupDirectionHandler();
+
+  /** 排序内存块集合 */
+  order(blocks: any[]): void {
+    blocks.reverse();
+  }
+
+}
+
+class HorizontalGroupDirectionHandler extends GroupDirectionHandlerAdapter {
+
+  public static defaults: HorizontalGroupDirectionHandler = new HorizontalGroupDirectionHandler();
+
+  getNextOrigin(painter: GroupPainter<any>, origin: Point): Point {
+    return origin.add(new Point(painter.cellSize.width, 0));
+  }
+
+}
+
+class VerticalGroupDirectionHandler extends GroupDirectionHandlerAdapter {
+
+  public static defaults: VerticalGroupDirectionHandler = new VerticalGroupDirectionHandler();
+
+  getNextOrigin(painter: GroupPainter<any>, origin: Point): Point {
+    return origin.add(new Point(0, painter.cellSize.height));
+  }
+
+}
+
+class CompositeGroupDirectionHandler implements GroupDirectionHandler {
+
+  /** 顺序 / 逆序 */
+  private orderHandler: GroupDirectionHandler;
+  /** 水平 / 垂直 */
+  private axisHandler: GroupDirectionHandler;
+
+  constructor(orderHandler: GroupDirectionHandler, axisHandler: GroupDirectionHandler) {
+    this.orderHandler = orderHandler;
+    this.axisHandler = axisHandler;
+  }
+
+  order(elements: any[]): void {
+    this.orderHandler.order(elements);
+  }
+
+  getNextOrigin(painter: GroupPainter<any>, origin: Point): Point {
+    return this.axisHandler.getNextOrigin(painter, origin);
+  }
+
+}
+
+/**
+ * 组绘制者，绘制一组相关元素。
+ *
+ * @param <E> 元素类型
+ */
+abstract class GroupPainter<E> {
+
+  public static directionHandlers = GroupPainter.buildDirectionHandlers();
+
+  public static buildDirectionHandlers() {
+    let directionHandlers: Record<GroupDirection, GroupDirectionHandler> = {
+      [GroupDirection.LEFT_RIGHT]: new CompositeGroupDirectionHandler(SequentialGroupDirectionHandler.defaults, HorizontalGroupDirectionHandler.defaults),
+      [GroupDirection.RIGHT_LEFT]: new CompositeGroupDirectionHandler(ReverseGroupDirectionHandler.defaults, HorizontalGroupDirectionHandler.defaults),
+      [GroupDirection.UP_BOTTOM]: new CompositeGroupDirectionHandler(SequentialGroupDirectionHandler.defaults, VerticalGroupDirectionHandler.defaults),
+      [GroupDirection.BOTTOM_UP]: new CompositeGroupDirectionHandler(ReverseGroupDirectionHandler.defaults, VerticalGroupDirectionHandler.defaults),
+    }
+    Object.keys(directionHandlers).forEach((value, index) => {
+      directionHandlers[value] = Logger.proxyInstance(directionHandlers[value]);
+    });
+    return directionHandlers;
+  }
+
+  public static cellFillColors: Record<string, Color> = {
+    "[anon]": Color.RGB(0.75, 1.0, 0.75, null),// 浅绿，已占用但不知道具体用途
+    "": Color.RGB(0.8, 0.8, 0.8, null),        // 灰色，无描述表示未使用
+    "*": Color.RGB(0.75, 1.0, 1.0, null),      // 蓝色，有效数据
+  };
+
+  public cellSize: Size = new Size(200, 20);
+  public cellTextSize: number = 12;
+  public cellFillColor: Color = Color.RGB(1.0, 1.0, 0.75, null);// 黄色
+  public direction: GroupDirection = GroupDirection.UP_BOTTOM;
+
+  /**
+   * 绘制。
+   *
+   * @param canvas 画布
+   * @param origin 起点
+   * @param content 内容
+   * @return 形状
+   */
+  public draw(canvas: Canvas, origin: Point, content: E[]): Group {
+    let directionHandler = this.getDirectionHandler();
+    directionHandler.order(content);
+    return new Group(content.map((text, index) => {
+      origin = index === 0 ? origin : directionHandler.getNextOrigin(this, origin);
+      return this.drawCell(canvas, origin, text);
+    }));
+  }
+
+  public getDirectionHandler() {
+    return GroupPainter.directionHandlers[this.direction];
+  }
+
+  public abstract drawCell(canvas: Canvas, origin: Point, element: E);
+
+}
+
+/**
+ * 组绘制者，绘制一组相关元素。
+ *
+ * @param <E> 元素类型
+ */
+class StringGroupPainter extends GroupPainter<string> {
+
+  /** 倾向于水平绘图，宽度调小 */
+  public static horizontal = StringGroupPainter.instance({cellSize: new Size(150, 20)});
+  public static vertical = StringGroupPainter.instance({cellSize: new Size(200, 20)});
+  public static defaults = this.horizontal;
+
+  public static instance<T>(options: Partial<StringGroupPainter>) {
+    return Logger.proxyInstance(Object.assign(new StringGroupPainter(), options));
+  }
+
+  /** 缓存每个 canvas 使用的 Painter */
+  public static canvasCache: Record<string, StringGroupPainter> = {};
+  /** 绘制模式-键 */
+  public static modeKey: string = "mode";
+  /** 绘制模式-默认值*/
+  public static modeValue: number = GroupDirection.BOTTOM_UP;
+  /** 文件位置键 */
+  public static locationKey = this.name;
+
+  /**
+   * 绘制地址空间布局。
+   *
+   * @param canvas 画布
+   * @param origin 起点
+   * @return 虚拟内存图
+   */
+  public static draw(canvas: Canvas = Common.canvas(), origin: Point = Common.windowCenterPoint()) {
+    let canvasName = canvas.name;
+    let painter = StringGroupPainter.canvasCache[canvasName];
+    // shift 强制重新配置
+    if (app.shiftKeyDown || !painter) {
+      let form = new Form();
+      form.addField(new Form.Field.Option(this.modeKey, "绘制模式", Enum.values(GroupDirection), Enum.keys(GroupDirection), this.modeValue, null), 0);
+      return form.show("配置地址空间绘制参数", "确定")
+        .then(response => {
+          painter = this.instance({direction: response.values[this.modeKey]});
+          StringGroupPainter.canvasCache[canvasName] = painter;
+          painter.drawInteractively(canvas, origin);
+        })
+        .catch(response => Logger.getLogger().error("error:", response));
+    }
+    // option 重新选择文件
+    if (app.optionKeyDown) Common.option(canvas, MemoryPainter.drawMemoryLocationKey, null);
+    return painter.drawInteractively(canvas, origin);
+  }
+
+  public static drawScript(options: { direction: string, content: string[] }) {
+    return this.instance({...options, direction: GroupDirection[options.direction]})
+      .draw(Common.canvas(), Common.windowCenterPoint(), options.content);
+  }
+
+  /**
+   * 交互式地绘制虚拟内存。
+   *
+   * @param canvas 画布
+   * @param origin 起点
+   * @param [content] 内容
+   * @return 虚拟内存图
+   */
+  public drawInteractively(canvas: Canvas = Common.canvas(), origin: Point = Common.windowCenterPoint(), content?: string) {
+    return Common.readFileContentSelectively(canvas, StringGroupPainter.locationKey, content)
+      .then(response => {
+        return JSON.parse(response.data);
+      })
+      .then(response => this.draw(canvas, origin, response))
+      .catch(response => Logger.getLogger().error(response));
+  }
+
+  /**
+   * 绘制单元格。
+   *
+   * @param canvas 画布
+   * @param origin 起点
+   * @param text 文本
+   * @return 形状
+   */
+  public drawCell(canvas: Canvas, origin: Point, text?: string): Shape {
+    let shape = canvas.newShape();
+    shape.geometry = new Rect(origin.x, origin.y, this.cellSize.width, this.cellSize.height);
+    shape.shadowColor = null;
+    this.cellTextSize && (shape.textSize = this.cellTextSize);
+    this.cellFillColor = StringGroupPainter.cellFillColors[text || ""] || StringGroupPainter.cellFillColors["*"];
+    this.cellFillColor && (shape.fillColor = this.cellFillColor);
+    text && (shape.text = text);
+    shape.magnets = Common.magnets_6;
+    return shape;
+  }
+
 }
 
 class ClassDiagram {
@@ -1432,7 +1615,7 @@ class ClassDiagramPainter {
 
   public static locationKey: string = ClassDiagramPainter.name;
   public static defaults: ClassDiagramPainter = Logger.proxyInstance(new ClassDiagramPainter());
-  public table: PeaceTable = PeaceTable.small;
+  public table: StringGroupPainter = StringGroupPainter.defaults;
   public offset: Size = new Size(100, 100);
 
   /** 插件入口 */
@@ -1524,27 +1707,30 @@ class Memory {
 
   public title: string;//标题
   public blocks: MemoryBlock[] = [];//内存块集合
+  public notes: MemoryNote[] = [];//内存块注释
 
   public static instance(content: Partial<Memory>) {
     return Object.assign(new Memory(), content);
   }
 
   /** 解析内存数据 */
-  public static parseJson(content: string) {
-    return this.instance({blocks: MemoryBlock.parseJson(content)});
+  public static parse(content: string, type: string) {
+    if (type === "json") {
+      let object: any = JSON.parse(content);
+      return object instanceof Array
+        ? this.instance({blocks: MemoryBlock.parseObject(object)})
+        : this.instance({
+          ...object,
+          notes: MemoryNote.parseObject(object.notes),
+          blocks: MemoryBlock.parseObject(object.blocks)
+        });
+    }
+    return this.instance({blocks: MemoryBlock.parse(content, type)});
   }
 
-  public static parseMaps(content: string): Memory {
-    return this.instance({blocks: MemoryBlock.parseMaps(content)});
+  public toString() {
+    return JSON.stringify({...this, blocks: `[${this.blocks?.length}]`});
   }
-
-  public static parseFrames(content: string): Memory {
-    return this.instance({blocks: MemoryBlock.parseFrames(content)});
-  }
-
-  // public toString() {
-  //   return JSON.stringify({...this, blocks: `[${this.blocks?.length}]`});
-  // }
 
 
 }
@@ -1556,15 +1742,18 @@ class MemoryBlock {
   public endAddress: number | bigint;//结束地址
   public description?: string; //描述
 
-  constructor(startAddress: number | bigint, endAddress: number | bigint, description?: string) {
-    this.startAddress = startAddress;
-    this.endAddress = endAddress;
-    this.description = description;
+  public static construct(startAddress?: number | bigint, endAddress?: number | bigint, description?: string) {
+    let block = new MemoryBlock();
+    block.startAddress = startAddress;
+    block.endAddress = endAddress;
+    block.description = description;
+    return block;
   }
 
   /** 实例化 */
-  public static instance(object: Partial<MemoryBlock>): MemoryBlock {
-    return Object.assign(new MemoryBlock(undefined, undefined, undefined), object);
+  public static instance(object: string | Partial<MemoryBlock>): MemoryBlock {
+    if (typeof object === "string") return MemoryBlock.construct(undefined, undefined, object);
+    return Object.assign(new MemoryBlock(), object);
   }
 
   public static parse(content: string | Record<string, any>[], type: string): MemoryBlock[] {
@@ -1576,16 +1765,16 @@ class MemoryBlock {
       case "json":
         return this.parseJson(content as string);
       default:
-        return this.parseRaw(content as Record<string, any>[]);
+        return this.parseObject(content as Record<string, any>[]);
     }
   }
 
   /** 从 json 字符串解析 */
   public static parseJson(content: string): MemoryBlock[] {
-    return this.parseRaw(JSON.parse(content));
+    return this.parseObject(JSON.parse(content));
   }
 
-  public static parseRaw(content: Record<string, any>[]): MemoryBlock[] {
+  public static parseObject(content: (string | Record<string, any>)[]): MemoryBlock[] {
     return content.map(item => this.instance(item));
   }
 
@@ -1597,19 +1786,19 @@ class MemoryBlock {
     let blocks = lines
       .filter(line => line.trim())   // 删除空行
       .map(line => line.split(/ +/)) // 按空格分割
-      .map(cells => {
-        let addresses = cells[0].split("-");
+      .map(elements => {
+        let addresses = elements[0].split("-");
         // 16 个 f 需要使用 bigint 才能表示
-        return new MemoryBlock(
+        return MemoryBlock.construct(
           BigInt(parseInt(addresses[0], 16)),
           BigInt(parseInt(addresses[1], 16)),
-          (cells[5] || "").split("/").pop() || "[anon]",//全路径太长，只取末尾的程序名
+          (elements[5] || "").split("/").pop() || "[anon]",//全路径太长，只取末尾的程序名
         )
       });
     // 填充顶部
-    blocks.unshift(new MemoryBlock(BigInt(0), blocks[0].startAddress));// 从 0 开始显示
+    blocks.unshift(MemoryBlock.construct(BigInt(0), blocks[0].startAddress));// 从 0 开始显示
     // 填充尾部
-    blocks.push(new MemoryBlock(
+    blocks.push(MemoryBlock.construct(
       blocks[blocks.length - 1].endAddress,// bigint 和 bigint 才能相减求 size
       BigInt("0xffffffffffffffff"),// 截止到 16 个 f，数值溢出，需要使用 bigint
     ));
@@ -1625,7 +1814,7 @@ class MemoryBlock {
     lines = Array.from(new Set(lines)); // 除重
     return lines.map(line => line.substr(line.indexOf("*") + 1))
       .map(item => JSON.parse(item))
-      .map(item => new MemoryBlock(parseInt(item.startAddress, 16), parseInt(item.endAddress, 16), item.description))
+      .map(item => MemoryBlock.construct(parseInt(item.startAddress, 16), parseInt(item.endAddress, 16), item.description))
       // 过滤掉 {"startAddress": "0x00007fffffffe1b0", "endAddress": "0x0000000000000000", "description": "thread.bin`_start" }
       .filter(item => item.endAddress > item.startAddress)
       ;
@@ -1673,12 +1862,12 @@ class MemoryBlock {
       //地址不连续，补齐空缺
       if (asc) {
         if (prev.endAddress < curr.startAddress) {
-          blocks.splice(i, 0, new MemoryBlock(prev.endAddress, curr.startAddress));
+          blocks.splice(i, 0, MemoryBlock.construct(prev.endAddress, curr.startAddress));
           i++;
         }
       } else {
         if (prev.startAddress > curr.endAddress) {
-          blocks.splice(i, 0, new MemoryBlock(curr.endAddress, prev.startAddress));
+          blocks.splice(i, 0, MemoryBlock.construct(curr.endAddress, prev.startAddress));
           i++;
         }
       }
@@ -1704,23 +1893,28 @@ class MemoryBlock {
 
 }
 
-/**
- * 绘图方向始终是从上向下，
- * 内存块集合传入时约定为升序排列（无序会自动排序），
- * 通过控制内存块集合的排序（升序/降序），可以控制内存的显示方向
- */
-enum MemoryDirection {
-  LEFT_RIGHT,//从左往右
-  RIGHT_LEFT,//从右往左，每个地址都对应一个字节，字节内部各标志位使用情况；eflags 寄存器各标志位使用情况
-  UP_BOTTOM,//从上往下
-  BOTTOM_UP,//从下往上，虚拟地址空间图
+class MemoryNote {
+  public start: number;//起始地址
+  public end: number;//结束地址
+  public description: string; //描述
+
+  /** 实例化 */
+  public static instance(object: Partial<MemoryNote>) {
+    return Object.assign(new MemoryNote(), object);
+  }
+
+  public static parseObject(content?: Record<string, any>[]): MemoryNote[] {
+    return content?.map(item => this.instance(item));
+  }
+
 }
+
 
 /** 内存绘制方向影响相关图形起点的处理方式 */
 interface MemoryDirectionHandler {
   order(blocks: MemoryBlock[]): void;
 
-  getNextBlockOrigin(painter: MemoryPainter, origin: Point): Point;
+  getNextOrigin(painter: MemoryPainter, origin: Point): Point;
 
   getAddressLineOrigin(painter: MemoryPainter, origin: Point): Point;
 
@@ -1738,7 +1932,7 @@ class MemoryDirectionHandlerAdapter implements MemoryDirectionHandler {
   order(blocks: MemoryBlock[]): void {
   }
 
-  getNextBlockOrigin(painter: MemoryPainter, origin: Point): Point {
+  getNextOrigin(painter: MemoryPainter, origin: Point): Point {
     return origin;
   }
 
@@ -1771,6 +1965,7 @@ class MemoryOrderHandler extends MemoryDirectionHandlerAdapter {
 
   /** 排序内存块集合 */
   order(blocks: MemoryBlock[]): void {
+    if (blocks.length > 0 && blocks[0].startAddress == undefined) return;//只有描述，没有坐标
     MemoryBlock.ascend(blocks);
     MemoryBlock.padding(blocks, true);
   }
@@ -1791,6 +1986,7 @@ class MemoryReverseHandler extends MemoryDirectionHandlerAdapter {
 
   /** 排序内存块集合 */
   order(blocks: MemoryBlock[]): void {
+    if (blocks.length > 0 && blocks[0].startAddress == undefined) return;//只有描述，没有坐标
     MemoryBlock.descend(blocks);
     MemoryBlock.padding(blocks, false);
   }
@@ -1809,7 +2005,7 @@ class MemoryHorizontalHandler extends MemoryDirectionHandlerAdapter {
 
   public static defaults: MemoryHorizontalHandler = new MemoryHorizontalHandler();
 
-  getNextBlockOrigin(painter: MemoryPainter, origin: Point): Point {
+  getNextOrigin(painter: MemoryPainter, origin: Point): Point {
     return origin.add(new Point(painter.table.cellSize.width, 0));
   }
 
@@ -1830,7 +2026,7 @@ class MemoryVerticalHandler extends MemoryDirectionHandlerAdapter {
 
   public static defaults: MemoryVerticalHandler = new MemoryVerticalHandler();
 
-  getNextBlockOrigin(painter: MemoryPainter, origin: Point): Point {
+  getNextOrigin(painter: MemoryPainter, origin: Point): Point {
     return origin.add(new Point(0, painter.table.cellSize.height));
   }
 
@@ -1869,8 +2065,8 @@ class AbstractMemoryDirectionHandler implements MemoryDirectionHandler {
     return this.directionHandler.getAddressLineOrigin(painter, origin);
   }
 
-  getNextBlockOrigin(painter: MemoryPainter, origin: Point): Point {
-    return this.directionHandler.getNextBlockOrigin(painter, origin);
+  getNextOrigin(painter: MemoryPainter, origin: Point): Point {
+    return this.directionHandler.getNextOrigin(painter, origin);
   }
 
   getAddressStartValue(painter: MemoryPainter, block: MemoryBlock): number | bigint {
@@ -1911,14 +2107,14 @@ class BottomUpHandler extends AbstractMemoryDirectionHandler {
 /** 内存画师 */
 class MemoryPainter {
 
-  public static LEFT_RIGHT: MemoryPainter = MemoryPainter.instanceHorizontal({direction: MemoryDirection.LEFT_RIGHT});
-  public static RIGHT_LEFT: MemoryPainter = MemoryPainter.instanceHorizontal({direction: MemoryDirection.RIGHT_LEFT});
-  public static UP_BOTTOM: MemoryPainter = MemoryPainter.instance({direction: MemoryDirection.UP_BOTTOM});
-  public static BOTTOM_UP: MemoryPainter = MemoryPainter.instance({direction: MemoryDirection.BOTTOM_UP});
+  public static LEFT_RIGHT: MemoryPainter = MemoryPainter.instanceHorizontal({direction: GroupDirection.LEFT_RIGHT});
+  public static RIGHT_LEFT: MemoryPainter = MemoryPainter.instanceHorizontal({direction: GroupDirection.RIGHT_LEFT});
+  public static UP_BOTTOM: MemoryPainter = MemoryPainter.instance({direction: GroupDirection.UP_BOTTOM});
+  public static BOTTOM_UP: MemoryPainter = MemoryPainter.instance({direction: GroupDirection.BOTTOM_UP});
   public static directionHandlers = MemoryPainter.buildDirectionHandlers();
 
-  public table: PeaceTable = PeaceTable.small;
-  public direction: MemoryDirection = MemoryDirection.BOTTOM_UP; //绘制方向
+  public table: StringGroupPainter = StringGroupPainter.defaults;
+  public direction: GroupDirection = GroupDirection.BOTTOM_UP; //绘制方向
   public showAddress: boolean = true;   // 是否显示地址
   public addressLineLength: number = 50;
   public addressLabelSize: Size = new Size(150, 20);
@@ -1927,18 +2123,18 @@ class MemoryPainter {
   public showSize: boolean = true;      // 是否显示占用空间
   public sizeStyle: string = "inner";   // 占用空间显示样式：outer、inner
 
-  public static _instance(painter: MemoryPainter, options: Partial<Record<keyof MemoryPainter, any>>) {
+  public static _instance(painter: MemoryPainter, options: Partial<MemoryPainter>) {
     Object.assign(painter, options);
     return Logger.proxyInstance(painter);
   }
 
-  public static instance(options: Partial<Record<keyof MemoryPainter, any>>) {
+  public static instance(options: Partial<MemoryPainter>) {
     return this._instance(new MemoryPainter(), options);
   }
 
-  public static instanceHorizontal(options: Partial<Record<keyof MemoryPainter, any>>) {
+  public static instanceHorizontal(options: Partial<MemoryPainter>) {
     let painter = new MemoryPainter();
-    painter.table = PeaceTable.horizontal;
+    painter.table = StringGroupPainter.horizontal;
     painter.addressLineLength = 25;
     painter.addressLabelTextBase = 10;
     painter.showSize = false;
@@ -1946,11 +2142,11 @@ class MemoryPainter {
   }
 
   public static buildDirectionHandlers() {
-    let directionHandlers: Record<MemoryDirection, MemoryDirectionHandler> = {
-      [MemoryDirection.LEFT_RIGHT]: new LeftRightHandler(),
-      [MemoryDirection.RIGHT_LEFT]: new RightLeftHandler(),
-      [MemoryDirection.UP_BOTTOM]: new UpBottomHandler(),
-      [MemoryDirection.BOTTOM_UP]: new BottomUpHandler(),
+    let directionHandlers: Record<GroupDirection, MemoryDirectionHandler> = {
+      [GroupDirection.LEFT_RIGHT]: new LeftRightHandler(),
+      [GroupDirection.RIGHT_LEFT]: new RightLeftHandler(),
+      [GroupDirection.UP_BOTTOM]: new UpBottomHandler(),
+      [GroupDirection.BOTTOM_UP]: new BottomUpHandler(),
     }
     Object.keys(directionHandlers).forEach((value, index) => {
       directionHandlers[value] = Logger.proxyInstance(directionHandlers[value]);
@@ -1968,7 +2164,7 @@ class MemoryPainter {
   /** 绘制模式-键 */
   public static modeKey: string = "mode";
   /** 绘制模式-默认值*/
-  public static modeValue: number = MemoryDirection.BOTTOM_UP;
+  public static modeValue: number = GroupDirection.BOTTOM_UP;
   public static drawMemoryLocationKey = "drawMemoryLocation";
 
 
@@ -1985,13 +2181,13 @@ class MemoryPainter {
     // shift 强制重新配置
     if (app.shiftKeyDown || !memory) {
       let form = new Form();
-      form.addField(new Form.Field.Option(this.modeKey, "绘制模式", Enum.values(MemoryDirection), Enum.keys(MemoryDirection), this.modeValue, null), 0);
+      form.addField(new Form.Field.Option(this.modeKey, "绘制模式", Enum.values(GroupDirection), Enum.keys(GroupDirection), this.modeValue, null), 0);
       return form.show("配置地址空间绘制参数", "确定")
         .then(response => {
           // Logger.getLogger().debug("form: ", response.values); // error
           Logger.getLogger().debug("modeKey: ", response.values[this.modeKey]);
-          Logger.getLogger().debug("MemoryDirection: ", MemoryDirection[response.values[this.modeKey]]);
-          memory = MemoryPainter[MemoryDirection[response.values[this.modeKey]]];
+          Logger.getLogger().debug("GroupDirection: ", GroupDirection[response.values[this.modeKey]]);
+          memory = MemoryPainter[GroupDirection[response.values[this.modeKey]]];
           Logger.getLogger().debug("direction: ", memory.direction);
           MemoryPainter.canvasCache[canvasName] = memory;
           memory.drawMemoryInteractively(canvas, origin);
@@ -2004,7 +2200,7 @@ class MemoryPainter {
   }
 
   public static drawScript({
-                             direction = MemoryDirection[MemoryDirection.BOTTOM_UP],
+                             direction = GroupDirection[GroupDirection.BOTTOM_UP],
                              type = "json",
                              content
                            }: Record<string, any>) {
@@ -2024,15 +2220,7 @@ class MemoryPainter {
   public drawMemoryInteractively(canvas: Canvas = Common.canvas(), origin: Point = Common.windowCenterPoint(), content?: string) {
     return Common.readFileContentSelectively(canvas, MemoryPainter.drawMemoryLocationKey, content)
       .then(response => {
-        if (response.url) {
-          if (response.url.toString().endsWith(".maps")) {
-            return Memory.parseMaps(response.data);
-          }
-          if (response.url.toString().endsWith(".frames")) {
-            return Memory.parseFrames(response.data);
-          }
-        }
-        return Memory.parseJson(JSON.parse(response.data));
+        return Memory.parse(response.data, response.url.toString().split(".").pop());
       })
       .then(response => this.drawMemory(canvas, origin, response))
       .catch(response => Logger.getLogger().error(response));
@@ -2069,7 +2257,7 @@ class MemoryPainter {
     this.addressLabelTextLength = MemoryBlock.getMaxAddressLength(blocks, this.addressLabelTextBase);
     // MemoryBlock.merge(blocks);
     let array = blocks.map((block, index) => {
-      if (index !== 0) origin = this.getDirectionHandler().getNextBlockOrigin(this, origin);
+      if (index !== 0) origin = this.getDirectionHandler().getNextOrigin(this, origin);
       // let prev = blocks[index - 1], curr = blocks[index];
       // if (prev.endAddress < curr.startAddress) {
       //   origin = origin.subtract(new Point(0, this.table.cellSize.height));
@@ -2092,7 +2280,7 @@ class MemoryPainter {
   public drawMemoryBlock(canvas: Canvas, origin: Point, block: MemoryBlock) {
     let cell = this.table.drawCell(canvas, origin, block.description);
     let directionHandler = this.getDirectionHandler();
-    let endpoint = directionHandler.getNextBlockOrigin(this, origin);
+    let endpoint = directionHandler.getNextOrigin(this, origin);
     let graphics: Graphic[] = [cell];
     if (this.showAddress) {
       block.endAddress != null && graphics.push(this.drawMemoryAddress(canvas, origin, directionHandler.getAddressStartValue(this, block)))
@@ -2186,6 +2374,7 @@ var _this = (function () {return this;})();
 (() => {
   let library = new PlugIn.Library(new Version("0.1"));
   [Common,
+    GroupPainter, StringGroupPainter,
     Memory, MemoryBlock, MemoryPainter,
     ClassDiagram, Entity, EntityProperty, ClassDiagramPainter,
     Stepper, LayerSwitcher]

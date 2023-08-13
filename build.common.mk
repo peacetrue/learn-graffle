@@ -1,11 +1,11 @@
 # 构建通用文件，声明构建目录的创建和清除
 override src:=src#源始文件目录，作为常量使用，请勿改变该值
 SRC:=$(src)#作为变量使用
-debug.vars+=src SRC
+DEBUG_VARS+=src SRC
 
 override build:=build#目标文件目录，作为常量使用，请勿改变该值
 BUILD:=$(build)#作为变量使用
-debug.vars+=build BUILD
+DEBUG_VARS+=build BUILD
 
 mkdir/%:; mkdir -p $*
 mkdir: mkdir/$(BUILD);
@@ -20,3 +20,9 @@ rm/%:; rm -r$(if $(filter $(build)%,$*),f,) $*
 rm: rm/$(BUILD);
 clean: rm;
 clean/%: rm/$(BUILD)/%;
+
+# 从源目录拷贝到目标目录
+# $(BUILD)/%: $(EXTERNAL_SRC)/% $(BUILD); cp $< $@
+EXTERNAL_SRC?=$(SRC)
+$(foreach item,$(EXTERNAL_SRC),$(eval $(BUILD)/%: $(item)/% $(BUILD); cp $$< $$@))
+DEBUG_VARS+=EXTERNAL_SRC
