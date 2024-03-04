@@ -11,7 +11,8 @@
             // }
             let Class = library[classType];
             let group = Class.drawScript.apply(Class, args);
-            document.windows[0].selection.view.select([group], true);
+            if (!group instanceof Array) group = [group];
+            document.windows[0].selection.view.select(group);
         }
 
         trys();

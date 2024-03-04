@@ -18,6 +18,10 @@
     },
     {
       "image": "images/icon.png",
+      "identifier": "graphic_extract"
+    },
+    {
+      "image": "images/icon.png",
       "identifier": "text_load"
     },
     {
@@ -30,6 +34,10 @@
     },
     {
       "image": "images/icon.png",
+      "identifier": "table_draw"
+    },
+    {
+      "image": "images/icon.png",
       "identifier": "memory_draw"
     },
     {
@@ -39,6 +47,10 @@
     {
       "image": "images/icon.png",
       "identifier": "layer_switch"
+    },
+    {
+      "image": "images/icon.png",
+      "identifier": "article_format"
     }
   ],
   "libraries": [

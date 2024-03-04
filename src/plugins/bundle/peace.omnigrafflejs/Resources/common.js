@@ -212,6 +212,7 @@ var Logger = /** @class */ (function () {
         _a["Common.canvas"] = LoggerLevel.WARN,
         _a["Common.selection"] = LoggerLevel.WARN,
         _a["Common.windowCenterPoint"] = LoggerLevel.WARN,
+        _a["Graphics.each"] = LoggerLevel.WARN,
         _a["Common"] = LoggerLevel.DEBUG,
         _a["MemoryPainter.incrementOrigin"] = LoggerLevel.WARN,
         _a["MemoryPainter.subtract"] = LoggerLevel.WARN,
@@ -774,6 +775,41 @@ var Common = /** @class */ (function () {
     Common.canvasOptions = {};
     return Common;
 }());
+var Arguments = /** @class */ (function () {
+    function Arguments() {
+    }
+    /** 统一参数为数组格式 */
+    Arguments.prototype.array = function (items) {
+        return items instanceof Array ? items : [items];
+    };
+    return Arguments;
+}());
+var Graphics = /** @class */ (function () {
+    function Graphics() {
+    }
+    /** 遍历图形 */
+    Graphics.each = function (graphic, invoker) {
+        var _this_1 = this;
+        if (graphic instanceof Group) {
+            graphic.graphics.forEach(function (graphic) { return _this_1.each(graphic, invoker); });
+        }
+        else {
+            invoker(graphic);
+        }
+    };
+    /** 提取文本 */
+    Graphics.extractText = function (graphics) {
+        return graphics
+            .filter(function (graphic) { return graphic instanceof Solid; })
+            .map(function (graphic) { return graphic.text; });
+    };
+    /** 提取文本到剪切板 */
+    Graphics.extractTextToClipboard = function (graphics, separator) {
+        if (separator === void 0) { separator = " "; }
+        Pasteboard.general.string = this.extractText(graphics).join(separator);
+    };
+    return Graphics;
+}());
 /**
  * 枚举，key 为名称，value 为索引，即针对后 3 项
  * ComponentDirection：{0: "BOTTOM_UP", 1: "LEFT_RIGHT", 2: "RIGHT_LEFT", BOTTOM_UP: 0, LEFT_RIGHT: 1, RIGHT_LEFT: 2}
@@ -1159,76 +1195,6 @@ var LayerSwitcher = /** @class */ (function () {
     LayerSwitcher.layerSwitchers = {};
     return LayerSwitcher;
 }());
-var TablePainter = /** @class */ (function () {
-    function TablePainter() {
-    }
-    /**
-     * 绘制表格。
-     *
-     * @param canvas 画布
-     * @param origin 起点
-     * @param texts 文本
-     * @return 形状
-     */
-    TablePainter.prototype.drawTable = function (canvas, origin, texts) {
-        var _this_1 = this;
-        var increase = new Point(0, 0);
-        return new Group(texts.map(function (item, index) {
-            origin = index === 0 ? origin : origin = origin.add(increase);
-            return _this_1.drawRow(canvas, origin, item);
-        }));
-    };
-    /**
-     * 绘制行。
-     *
-     * @param canvas 画布
-     * @param origin 起点
-     * @param texts 文本
-     * @return 形状
-     */
-    TablePainter.prototype.drawRow = function (canvas, origin, texts) {
-        return undefined;
-    };
-    TablePainter.extractGraphicTexts = function (graphic) {
-        var _this_1 = this;
-        var texts = [];
-        if (!(graphic instanceof Array))
-            graphic = [graphic];
-        graphic.forEach(function (item) { return _this_1.extractGraphicTextsRecursively(item, texts); });
-        return texts;
-    };
-    TablePainter.extractGraphicTextsRecursively = function (graphic, texts) {
-        if (graphic instanceof Solid) {
-            texts.push(this.extractSolidText(graphic));
-        }
-        else if (graphic instanceof Group) {
-            if (graphic instanceof Table) {
-                texts.push.apply(texts, this.extractTableTexts(graphic));
-            }
-            else {
-                for (var _i = 0, _a = graphic.graphics; _i < _a.length; _i++) {
-                    var subGraphic = _a[_i];
-                    this.extractGraphicTextsRecursively(subGraphic, texts);
-                }
-            }
-        }
-    };
-    TablePainter.extractTableTexts = function (table) {
-        var texts = [];
-        for (var i = 0; i < table.rows; i++) {
-            texts.push([]);
-            for (var j = 0; j < table.columns; j++) {
-                var graphic = table.graphicAt(i, j);
-                graphic && graphic instanceof Solid && (texts[i][j] = this.extractSolidText(graphic));
-            }
-        }
-        return texts;
-    };
-    TablePainter.extractSolidText = function (solid) {
-        return solid.text;
-    };
-    return TablePainter;
-}());
 /**
  * 组件方向即组件展示方向。
  * 绘图方向始终是从上向下，数据展示方向则有多种可能。
@@ -1555,8 +1521,14 @@ var RectCollectionPainter = /** @class */ (function (_super) {
     };
     var _g;
     _g = RectCollectionPainter;
-    RectCollectionPainter.horizontal = RectCollectionPainter.instance({ elementSize: new Size(150, 20) });
-    RectCollectionPainter.vertical = RectCollectionPainter.instance({ elementSize: new Size(200, 20) });
+    RectCollectionPainter.horizontal = RectCollectionPainter.instance({
+        elementSize: new Size(150, 20),
+        direction: ComponentDirection.LEFT_RIGHT
+    });
+    RectCollectionPainter.vertical = RectCollectionPainter.instance({
+        elementSize: new Size(200, 20),
+        direction: ComponentDirection.BOTTOM_UP
+    });
     RectCollectionPainter.defaults = _g.horizontal;
     RectCollectionPainter.elementFillColors = {
         "[anon]": Color.RGB(0.75, 1.0, 0.75, null),
@@ -1576,6 +1548,9 @@ var RectCollectionPainter = /** @class */ (function (_super) {
 var RectNote = /** @class */ (function () {
     function RectNote() {
     }
+    RectNote.instance = function (options) {
+        return Object.assign(new RectNote(), options);
+    };
     RectNote.prototype.toString = function () {
         return JSON.stringify(this);
     };
@@ -1623,8 +1598,10 @@ var NoteRectCollectionPainter = /** @class */ (function (_super) {
     }
     NoteRectCollectionPainter.instance = function (options) {
         var instance = Object.assign(new NoteRectCollectionPainter(), options);
-        instance.setDirection(options.direction);
+        options.rectCollectionPainter && (instance.rectCollectionPainter = RectCollectionPainter.instance(options.rectCollectionPainter));
+        options.notePainter && (instance.notePainter = NotePainter.instance(options.notePainter));
         instance.notePainter.elementSize = instance.rectCollectionPainter.elementSize;
+        instance.setDirection(options.direction);
         return Logger.proxyInstance(instance);
     };
     NoteRectCollectionPainter.drawScript = function (options) {
@@ -1641,8 +1618,9 @@ var NoteRectCollectionPainter = /** @class */ (function (_super) {
     };
     NoteRectCollectionPainter.prototype.drawNoteGroups = function (canvas, noteStartPoint, noteRectCollection) {
         var _this_1 = this;
-        return noteRectCollection.notes.map(function (notes) {
-            _this_1.notePainter.anchorLineSize *= 2;
+        var anchorLineSize = this.notePainter.anchorLineSize;
+        return noteRectCollection.notes.map(function (notes, index) {
+            _this_1.notePainter.anchorLineSize = anchorLineSize * (index + 1);
             return _this_1.drawNoteGroup(canvas, noteStartPoint, notes);
         });
     };
@@ -1681,9 +1659,9 @@ var ClassDiagram = /** @class */ (function () {
 var Entity = /** @class */ (function () {
     function Entity() {
     }
-    Entity.parse = function (content) {
-        var entity = Object.assign(new Entity(), content);
-        entity.properties = content.properties.map(function (item) { return EntityProperty.parse(item); });
+    Entity.parse = function (options) {
+        var entity = Object.assign(new Entity(), options);
+        entity.properties && (entity.properties = options.properties.map(function (item) { return EntityProperty.parse(item); }));
         return entity;
     };
     Entity.prototype.toString = function () {
@@ -1732,9 +1710,13 @@ var InstanceProperty = /** @class */ (function () {
 }());
 var ClassDiagramPainter = /** @class */ (function () {
     function ClassDiagramPainter() {
-        this.table = RectCollectionPainter.defaults;
+        this.table = RectCollectionPainter.vertical;
         this.offset = new Size(100, 100);
     }
+    ClassDiagramPainter.instance = function (options) {
+        options.table && (options.table = RectCollectionPainter.instance(options.table));
+        return Logger.proxyInstance(Object.assign(new ClassDiagramPainter(), options));
+    };
     /** 插件入口 */
     ClassDiagramPainter.draw = function (canvas, origin) {
         if (canvas === void 0) { canvas = Common.canvas(); }
@@ -1742,8 +1724,8 @@ var ClassDiagramPainter = /** @class */ (function () {
         return this.defaults.drawInteractively(canvas, origin);
     };
     /** 脚本入口 */
-    ClassDiagramPainter.drawScript = function (content) {
-        return this.defaults.draw(Common.canvas(), Common.windowCenterPoint(), ClassDiagram.parse(content));
+    ClassDiagramPainter.drawScript = function (options) {
+        return this.instance(options).draw(Common.canvas(), Common.windowCenterPoint(), ClassDiagram.parse(options.content));
     };
     ClassDiagramPainter.prototype.drawInteractively = function (canvas, origin) {
         var _this_1 = this;
@@ -1780,6 +1762,8 @@ var ClassDiagramPainter = /** @class */ (function () {
         var _this_1 = this;
         var increase = new Point(0, this.table.elementSize.height);
         var header = this.drawHeader(canvas, origin, entity.name);
+        if (!entity.properties)
+            return new Group([header]);
         var properties = entity.properties.map(function (property, index) {
             return _this_1.drawProperty(canvas, origin = origin.add(increase), property);
         });
@@ -1798,9 +1782,7 @@ var ClassDiagramPainter = /** @class */ (function () {
     };
     ClassDiagramPainter.prototype.drawPropertyRef = function (canvas, origin, propertyCell, property) {
         var _this_1 = this;
-        if (!property.ref)
-            return;
-        var entity = ClassDiagramPainter.entities.find(function (item) { return item.name == property.ref; });
+        var entity = ClassDiagramPainter.entities.find(function (item) { return item.name === (property.ref || property.type); });
         if (!entity)
             return;
         origin = origin.add(new Point(this.table.elementSize.width + this.offset.width, 0));
@@ -2402,6 +2384,198 @@ var MemoryPainter = /** @class */ (function () {
     MemoryPainter.drawMemoryLocationKey = "drawMemoryLocation";
     return MemoryPainter;
 }());
+var TablePainter = /** @class */ (function () {
+    function TablePainter() {
+        this.rectCollectionPainter = RectCollectionPainter.horizontal;
+    }
+    TablePainter.instance = function (options) {
+        var tablePainter = Object.assign(new TablePainter(), options);
+        tablePainter.rectCollectionPainter = RectCollectionPainter.instance({
+            elementSize: new Size(150, 20),
+            direction: options.rectCollectionPainter.direction
+        });
+        return Logger.proxyInstance(tablePainter);
+    };
+    TablePainter.draw = function (canvas, origin, content) {
+        var _this_1 = this;
+        if (canvas === void 0) { canvas = Common.canvas(); }
+        if (origin === void 0) { origin = Common.windowCenterPoint(); }
+        var canvasName = canvas.name;
+        var instance = this.canvasCache[canvasName];
+        // shift 强制重新配置
+        if (app.shiftKeyDown || !instance) {
+            var form = new Form();
+            form.addField(new Form.Field.Option(this.directionKey, "绘制方向", Enum.values(ComponentDirection), Enum.keys(ComponentDirection), this.directionValue, null), 0);
+            return form.show("配置表格绘制参数", "确定")
+                .then(function (response) {
+                var direction = response.values[_this_1.directionKey];
+                instance = _this_1.instance({ rectCollectionPainter: { direction: direction } });
+                _this_1.canvasCache[canvasName] = instance;
+                instance.drawInteractively(canvas, origin, content);
+            })
+                .catch(function (response) { return Logger.getLogger().error("error:", response); });
+        }
+        // option 重新选择文件
+        if (app.optionKeyDown)
+            Common.option(canvas, this.locationKey, null);
+        return instance.drawInteractively(canvas, origin, content);
+    };
+    TablePainter.drawScript = function (options) {
+        return this.instance({ rectCollectionPainter: { direction: ComponentDirection[options.direction] } })
+            .draw(Common.canvas(), Common.windowCenterPoint(), options.content);
+    };
+    /**
+     * 交互式地绘制虚拟内存。
+     *
+     * @param canvas 画布
+     * @param origin 起点
+     * @param [content] 内容
+     * @return 虚拟内存图
+     */
+    TablePainter.prototype.drawInteractively = function (canvas, origin, content) {
+        var _this_1 = this;
+        if (canvas === void 0) { canvas = Common.canvas(); }
+        if (origin === void 0) { origin = Common.windowCenterPoint(); }
+        return Common.readFileContentSelectively(canvas, TablePainter.locationKey, content)
+            .then(function (response) { return JSON.parse(response.data); })
+            .then(function (response) { return _this_1.draw(canvas, origin, response); })
+            .catch(function (response) { return Logger.getLogger().error(response); });
+    };
+    /**
+     * 绘制表格。
+     *
+     * @param canvas 画布
+     * @param origin 起点
+     * @param texts 文本
+     * @return 形状
+     */
+    TablePainter.prototype.draw = function (canvas, origin, texts) {
+        var _this_1 = this;
+        var direction = Direction.parse(this.rectCollectionPainter.direction);
+        texts = direction.isHorizontal() ? texts : TablePainter.transposeMatrix(texts);
+        var increase = direction.offsetAxisSize(this.rectCollectionPainter.elementSize, true);
+        return new Group(texts.map(function (item, index) {
+            origin = index === 0 ? origin : origin = origin.add(increase);
+            return _this_1.rectCollectionPainter.draw(canvas, origin, item);
+        }));
+    };
+    /** 行列转换 */
+    TablePainter.transposeMatrix = function (matrix) {
+        var rows = matrix.length;
+        var columns = matrix[0].length;
+        // 创建一个新的矩阵，交换行和列
+        var transposedMatrix = [];
+        for (var j = 0; j < columns; j++) {
+            transposedMatrix[j] = [];
+            for (var i = 0; i < rows; i++) {
+                transposedMatrix[j][i] = matrix[i][j];
+            }
+        }
+        return transposedMatrix;
+    };
+    TablePainter.extractGraphicTexts = function (graphic) {
+        var _this_1 = this;
+        var texts = [];
+        if (!(graphic instanceof Array))
+            graphic = [graphic];
+        graphic.forEach(function (item) { return _this_1.extractGraphicTextsRecursively(item, texts); });
+        return texts;
+    };
+    TablePainter.extractGraphicTextsRecursively = function (graphic, texts) {
+        if (graphic instanceof Solid) {
+            texts.push(this.extractSolidText(graphic));
+        }
+        else if (graphic instanceof Group) {
+            if (graphic instanceof Table) {
+                texts.push.apply(texts, this.extractTableTexts(graphic));
+            }
+            else {
+                for (var _i = 0, _a = graphic.graphics; _i < _a.length; _i++) {
+                    var subGraphic = _a[_i];
+                    this.extractGraphicTextsRecursively(subGraphic, texts);
+                }
+            }
+        }
+    };
+    TablePainter.extractTableTexts = function (table) {
+        var texts = [];
+        for (var i = 0; i < table.rows; i++) {
+            texts.push([]);
+            for (var j = 0; j < table.columns; j++) {
+                var graphic = table.graphicAt(i, j);
+                graphic && graphic instanceof Solid && (texts[i][j] = this.extractSolidText(graphic));
+            }
+        }
+        return texts;
+    };
+    TablePainter.extractSolidText = function (solid) {
+        return solid.text;
+    };
+    var _j;
+    _j = TablePainter;
+    TablePainter.locationKey = _j.name;
+    TablePainter.canvasCache = {};
+    TablePainter.directionKey = "direction";
+    TablePainter.directionValue = ComponentDirection.LEFT_RIGHT;
+    TablePainter.defaults = Logger.proxyInstance(new TablePainter());
+    return TablePainter;
+}());
+/** 文章标题排版 */
+var ArticleTitles = /** @class */ (function () {
+    function ArticleTitles() {
+        this.fontSizes = [];
+    }
+    ArticleTitles.instance = function (options) {
+        var instance = Object.assign(new ArticleTitles(), options);
+        instance.formatFontSizes(this.fontSize);
+        return Logger.proxyInstance(instance);
+    };
+    ArticleTitles.prototype.formatFontSizes = function (fontSize) {
+        this.fontSizes = new Array(ArticleTitles.level).fill(fontSize)
+            .map(function (value, index) { return fontSize * Math.pow(ArticleTitles.fontSizeRatio, index); });
+    };
+    ArticleTitles.prototype.format = function (canvas) {
+        var _this_1 = this;
+        // 处理 h1，h1 只有一个
+        var h1 = canvas.graphicWithName("h1");
+        if (h1) {
+            h1.textSize = this.fontSizes[0];
+            h1.textHorizontalAlignment = HorizontalTextAlignment.Center;
+        }
+        // 处理其他，其他可能重复
+        var indexes = [];
+        var prevGraphicLevel = 0;
+        for (var _i = 0, _a = canvas.graphics; _i < _a.length; _i++) {
+            var graphic = _a[_i];
+            Graphics.each(graphic, function (graphic) {
+                if (!(graphic instanceof Solid))
+                    return;
+                var matched = /^h(\d+)/.exec(graphic.name);
+                if (!matched)
+                    return;
+                var level = parseInt(matched[1]);
+                if (!(1 < level && level <= ArticleTitles.level))
+                    return; // 处理 2 ~ 6 级别
+                if (prevGraphicLevel < level)
+                    indexes.push(0);
+                else if (prevGraphicLevel > level)
+                    indexes.pop();
+                prevGraphicLevel = level;
+                indexes[indexes.length - 1]++;
+                var text = graphic.text.split(".").pop().trim();
+                graphic.text = "".concat(indexes.join("."), ". ").concat(text);
+                graphic.textSize = _this_1.fontSizes[level - 1];
+                graphic.textHorizontalAlignment = HorizontalTextAlignment.Left;
+                Common.bolder(graphic);
+            });
+        }
+    };
+    ArticleTitles.level = 6; //标题级别：h1 ~ h6
+    ArticleTitles.fontSize = 36; //h1（最大号）字体尺寸：h1 font size
+    ArticleTitles.fontSizeRatio = 0.8; // h2 = h1 * ratio
+    ArticleTitles.defaults = ArticleTitles.instance({});
+    return ArticleTitles;
+}());
 // 获取到当前 this 对象，代理其上属性时需要重新赋值
 // var _this = this; // 错误的方式
 //@formatter:off
@@ -2409,12 +2583,12 @@ var _this = (function () { return this; })();
 //@formatter:on
 (function () {
     var library = new PlugIn.Library(new Version("0.1"));
-    [Common,
-        NotePainter,
+    [Common, Graphics,
+        Direction, TablePainter, NotePainter,
         CollectionPainter, RectCollectionPainter, NoteRectCollectionPainter,
         Memory, MemoryBlock, MemoryPainter,
-        ClassDiagram, Entity, EntityProperty, ClassDiagramPainter,
-        Stepper, LayerSwitcher]
+        ClassDiagram, ClassDiagramPainter, Entity, EntityProperty,
+        Stepper, LayerSwitcher, ArticleTitles]
         .forEach(function (item) {
         library[item.name] = item;
         Logger.proxyClassStaticFunction(item);

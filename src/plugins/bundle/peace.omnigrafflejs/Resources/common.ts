@@ -20,6 +20,7 @@ class Logger {
     "Common.canvas": LoggerLevel.WARN,
     "Common.selection": LoggerLevel.WARN,
     "Common.windowCenterPoint": LoggerLevel.WARN,
+    "Graphics.each": LoggerLevel.WARN,
     "Common": LoggerLevel.DEBUG,
     "MemoryPainter.incrementOrigin": LoggerLevel.WARN,
     "MemoryPainter.subtract": LoggerLevel.WARN,
@@ -466,6 +467,7 @@ class Common {
     }
   }
 
+
   /**
    * 获取矩形指定位置处的点。方位顺序：上下左右，top-left。
    *
@@ -774,6 +776,36 @@ class Common {
     return value;
   }
 
+}
+
+class Arguments {
+  /** 统一参数为数组格式 */
+  array<T>(items: T | T[]) {
+    return items instanceof Array ? items : [items];
+  }
+}
+
+class Graphics {
+  /** 遍历图形 */
+  public static each(graphic: Graphic, invoker: (graphic) => void) {
+    if (graphic instanceof Group) {
+      graphic.graphics.forEach(graphic => this.each(graphic, invoker));
+    } else {
+      invoker(graphic);
+    }
+  }
+
+  /** 提取文本 */
+  public static extractText(graphics: Graphic[]): string[] {
+    return graphics
+      .filter(graphic => graphic instanceof Solid)
+      .map(graphic => (graphic as Solid).text);
+  }
+
+  /** 提取文本到剪切板 */
+  public static extractTextToClipboard(graphics: Graphic[], separator: string = " ") {
+    Pasteboard.general.string = this.extractText(graphics).join(separator);
+  }
 }
 
 /**
@@ -1225,77 +1257,6 @@ class LayerSwitcher {
   }
 }
 
-class TablePainter {
-  /**
-   * 绘制表格。
-   *
-   * @param canvas 画布
-   * @param origin 起点
-   * @param texts 文本
-   * @return 形状
-   */
-  public drawTable(canvas: Canvas, origin: Point, texts: string[][]): Group {
-    let increase = new Point(0, 0);
-    return new Group(
-      texts.map((item, index) => {
-        origin = index === 0 ? origin : origin = origin.add(increase);
-        return this.drawRow(canvas, origin, item);
-      })
-    );
-  }
-
-  /**
-   * 绘制行。
-   *
-   * @param canvas 画布
-   * @param origin 起点
-   * @param texts 文本
-   * @return 形状
-   */
-  public drawRow(canvas: Canvas, origin: Point, texts: string[]): Group {
-    return undefined;
-  }
-
-
-  public static extractGraphicTexts(graphic: Graphic | Graphic[]): any[] {
-    let texts: object[] = [];
-    if (!(graphic instanceof Array)) graphic = [graphic];
-
-    graphic.forEach(item => this.extractGraphicTextsRecursively(item, texts));
-    return texts;
-  }
-
-  public static extractGraphicTextsRecursively(graphic: Graphic, texts: any[]): void {
-
-    if (graphic instanceof Solid) {
-      texts.push(this.extractSolidText(graphic));
-    } else if (graphic instanceof Group) {
-      if (graphic instanceof Table) {
-        texts.push(...this.extractTableTexts(graphic));
-      } else {
-        for (let subGraphic of graphic.graphics) {
-          this.extractGraphicTextsRecursively(subGraphic, texts);
-        }
-      }
-    }
-  }
-
-  public static extractTableTexts(table: Table): string[][] {
-    let texts: string[][] = [];
-    for (let i = 0; i < table.rows; i++) {
-      texts.push([]);
-      for (let j = 0; j < table.columns; j++) {
-        let graphic = table.graphicAt(i, j);
-        graphic && graphic instanceof Solid && (texts[i][j] = this.extractSolidText(graphic));
-      }
-    }
-    return texts;
-  }
-
-  public static extractSolidText(solid: Solid): string {
-    return solid.text;
-  }
-}
 
 /**
  * 组件方向即组件展示方向。
@@ -1602,8 +1563,14 @@ class AllRectCollectionDirectionHandler extends AbstractDirectionHandler impleme
 /** 矩阵集合绘制者 */
 class RectCollectionPainter extends CollectionPainter {
 
-  public static horizontal = RectCollectionPainter.instance({elementSize: new Size(150, 20)});
-  public static vertical = RectCollectionPainter.instance({elementSize: new Size(200, 20)});
+  public static horizontal = RectCollectionPainter.instance({
+    elementSize: new Size(150, 20),
+    direction: ComponentDirection.LEFT_RIGHT
+  });
+  public static vertical = RectCollectionPainter.instance({
+    elementSize: new Size(200, 20),
+    direction: ComponentDirection.BOTTOM_UP
+  });
   public static defaults = this.horizontal;
 
   public static elementFillColors: Record<string, Color> = {
@@ -1706,6 +1673,10 @@ class RectNote {
   public end: number;
   public description: string;
 
+  public static instance(options: Partial<RectNote>) {
+    return Object.assign(new RectNote(), options);
+  }
+
   public toString() {
     return JSON.stringify(this);
   }
@@ -1760,8 +1731,10 @@ class NoteRectCollectionPainter extends AbstractDirectionPainter {
 
   public static instance<T>(options: Partial<NoteRectCollectionPainter>): NoteRectCollectionPainter {
     let instance = Object.assign(new NoteRectCollectionPainter(), options);
-    instance.setDirection(options.direction);
+    options.rectCollectionPainter && (instance.rectCollectionPainter = RectCollectionPainter.instance(options.rectCollectionPainter));
+    options.notePainter && (instance.notePainter = NotePainter.instance(options.notePainter));
     instance.notePainter.elementSize = instance.rectCollectionPainter.elementSize;
+    instance.setDirection(options.direction);
     return Logger.proxyInstance(instance);
   }
 
@@ -1780,8 +1753,9 @@ class NoteRectCollectionPainter extends AbstractDirectionPainter {
   }
 
   private drawNoteGroups(canvas: Canvas, noteStartPoint: Point, noteRectCollection: NoteRectCollection) {
-    return noteRectCollection.notes.map(notes => {
-      this.notePainter.anchorLineSize *= 2;
+    let anchorLineSize = this.notePainter.anchorLineSize;
+    return noteRectCollection.notes.map((notes, index) => {
+      this.notePainter.anchorLineSize = anchorLineSize * (index + 1);
       return this.drawNoteGroup(canvas, noteStartPoint, notes);
     });
   }
@@ -1826,9 +1800,9 @@ class Entity {
   public name: string;
   public properties: EntityProperty[];
 
-  public static parse(content: Partial<Entity>) {
-    let entity = Object.assign(new Entity(), content);
-    entity.properties = content.properties.map(item => EntityProperty.parse(item));
+  public static parse(options: Partial<Entity>) {
+    let entity = Object.assign(new Entity(), options);
+    entity.properties && (entity.properties = options.properties.map(item => EntityProperty.parse(item)));
     return entity;
   }
 
@@ -1885,8 +1859,13 @@ class ClassDiagramPainter {
 
   public static locationKey: string = ClassDiagramPainter.name;
   public static defaults: ClassDiagramPainter = Logger.proxyInstance(new ClassDiagramPainter());
-  public table: RectCollectionPainter = RectCollectionPainter.defaults;
+  public table: RectCollectionPainter = RectCollectionPainter.vertical;
   public offset: Size = new Size(100, 100);
+
+  public static instance(options: Partial<ClassDiagramPainter>) {
+    options.table && (options.table = RectCollectionPainter.instance(options.table));
+    return Logger.proxyInstance(Object.assign(new ClassDiagramPainter(), options));
+  }
 
   /** 插件入口 */
   public static draw(canvas: Canvas = Common.canvas(), origin: Point = Common.windowCenterPoint()) {
@@ -1894,8 +1873,8 @@ class ClassDiagramPainter {
   }
 
   /** 脚本入口 */
-  public static drawScript(content: Record<string, any>) {
-    return this.defaults.draw(Common.canvas(), Common.windowCenterPoint(), ClassDiagram.parse(content));
+  public static drawScript(options: Partial<ClassDiagramPainter> & { content: ClassDiagram }) {
+    return this.instance(options).draw(Common.canvas(), Common.windowCenterPoint(), ClassDiagram.parse(options.content));
   }
 
   public drawInteractively(canvas: Canvas, origin: Point) {
@@ -1937,6 +1916,7 @@ class ClassDiagramPainter {
   public drawEntity(canvas: Canvas, origin: Point, entity: Entity) {
     let increase: Point = new Point(0, this.table.elementSize.height);
     let header = this.drawHeader(canvas, origin, entity.name);
+    if (!entity.properties) return new Group([header]);
     let properties = entity.properties.map((property, index) => {
       return this.drawProperty(canvas, origin = origin.add(increase), property);
     });
@@ -1957,8 +1937,7 @@ class ClassDiagramPainter {
   }
 
   public drawPropertyRef(canvas: Canvas, origin: Point, propertyCell: Shape, property: EntityProperty) {
-    if (!property.ref) return;
-    let entity = ClassDiagramPainter.entities.find(item => item.name == property.ref);
+    let entity = ClassDiagramPainter.entities.find(item => item.name === (property.ref || property.type));
     if (!entity) return;
     origin = origin.add(new Point(this.table.elementSize.width + this.offset.width, 0));
     let entityGroup = ClassDiagramPainter.invokeCachely(entity.name, () => this.drawEntity(canvas, origin, entity));
@@ -2636,6 +2615,194 @@ class MemoryPainter {
 
 }
 
+class TablePainter {
+
+  public static locationKey = this.name;
+  public static canvasCache: Record<string, TablePainter> = {};
+  public static directionKey: string = "direction";
+  public static directionValue: number = ComponentDirection.LEFT_RIGHT;
+  public static defaults = Logger.proxyInstance(new TablePainter());
+  public rectCollectionPainter = RectCollectionPainter.horizontal;
+
+  public static instance(options: { rectCollectionPainter: Record<string, any> }) {
+    let tablePainter = Object.assign(new TablePainter(), options);
+    tablePainter.rectCollectionPainter = RectCollectionPainter.instance({
+      elementSize: new Size(150, 20),
+      direction: options.rectCollectionPainter.direction
+    })
+    return Logger.proxyInstance(tablePainter);
+  }
+
+  public static draw(canvas: Canvas = Common.canvas(), origin: Point = Common.windowCenterPoint(), content?: string) {
+    let canvasName = canvas.name;
+    let instance: TablePainter = this.canvasCache[canvasName];
+    // shift 强制重新配置
+    if (app.shiftKeyDown || !instance) {
+      let form = new Form();
+      form.addField(new Form.Field.Option(this.directionKey, "绘制方向", Enum.values(ComponentDirection), Enum.keys(ComponentDirection), this.directionValue, null), 0);
+      return form.show("配置表格绘制参数", "确定")
+        .then(response => {
+          let direction = response.values[this.directionKey];
+          instance = this.instance({rectCollectionPainter: {direction: direction}});
+          this.canvasCache[canvasName] = instance;
+          instance.drawInteractively(canvas, origin, content);
+        })
+        .catch(response => Logger.getLogger().error("error:", response));
+    }
+    // option 重新选择文件
+    if (app.optionKeyDown) Common.option(canvas, this.locationKey, null);
+    return instance.drawInteractively(canvas, origin, content);
+  }
+
+  public static drawScript(options: { direction: string, content: string[][] }) {
+    return this.instance({rectCollectionPainter: {direction: ComponentDirection[options.direction]}})
+      .draw(Common.canvas(), Common.windowCenterPoint(), options.content);
+  }
+
+  /**
+   * 交互式地绘制虚拟内存。
+   *
+   * @param canvas 画布
+   * @param origin 起点
+   * @param [content] 内容
+   * @return 虚拟内存图
+   */
+  public drawInteractively(canvas: Canvas = Common.canvas(), origin: Point = Common.windowCenterPoint(), content?: string) {
+    return Common.readFileContentSelectively(canvas, TablePainter.locationKey, content)
+      .then(response => JSON.parse(response.data))
+      .then(response => this.draw(canvas, origin, response))
+      .catch(response => Logger.getLogger().error(response));
+  }
+
+  /**
+   * 绘制表格。
+   *
+   * @param canvas 画布
+   * @param origin 起点
+   * @param texts 文本
+   * @return 形状
+   */
+  public draw(canvas: Canvas, origin: Point, texts: string[][]): Group {
+    let direction = Direction.parse(this.rectCollectionPainter.direction);
+    texts = direction.isHorizontal() ? texts : TablePainter.transposeMatrix(texts);
+    let increase = direction.offsetAxisSize(this.rectCollectionPainter.elementSize, true);
+    return new Group(
+      texts.map((item, index) => {
+        origin = index === 0 ? origin : origin = origin.add(increase);
+        return this.rectCollectionPainter.draw(canvas, origin, item);
+      })
+    );
+  }
+
+  /** 行列转换 */
+  public static transposeMatrix<T>(matrix: T[][]) {
+    const rows = matrix.length;
+    const columns = matrix[0].length;
+
+    // 创建一个新的矩阵，交换行和列
+    const transposedMatrix: T[][] = [];
+    for (let j = 0; j < columns; j++) {
+      transposedMatrix[j] = [];
+      for (let i = 0; i < rows; i++) {
+        transposedMatrix[j][i] = matrix[i][j];
+      }
+    }
+    return transposedMatrix;
+  }
+
+
+  public static extractGraphicTexts(graphic: Graphic | Graphic[]): any[] {
+    let texts: object[] = [];
+    if (!(graphic instanceof Array)) graphic = [graphic];
+
+    graphic.forEach(item => this.extractGraphicTextsRecursively(item, texts));
+    return texts;
+  }
+
+  public static extractGraphicTextsRecursively(graphic: Graphic, texts: any[]): void {
+    if (graphic instanceof Solid) {
+      texts.push(this.extractSolidText(graphic));
+    } else if (graphic instanceof Group) {
+      if (graphic instanceof Table) {
+        texts.push(...this.extractTableTexts(graphic));
+      } else {
+        for (let subGraphic of graphic.graphics) {
+          this.extractGraphicTextsRecursively(subGraphic, texts);
+        }
+      }
+    }
+  }
+
+  public static extractTableTexts(table: Table): string[][] {
+    let texts: string[][] = [];
+    for (let i = 0; i < table.rows; i++) {
+      texts.push([]);
+      for (let j = 0; j < table.columns; j++) {
+        let graphic = table.graphicAt(i, j);
+        graphic && graphic instanceof Solid && (texts[i][j] = this.extractSolidText(graphic));
+      }
+    }
+    return texts;
+  }
+
+  public static extractSolidText(solid: Solid): string {
+    return solid.text;
+  }
+}
+
+
+/** 文章标题排版 */
+class ArticleTitles {
+  public static level = 6;//标题级别：h1 ~ h6
+  public static fontSize = 36;//h1（最大号）字体尺寸：h1 font size
+  public static fontSizeRatio = 0.8;// h2 = h1 * ratio
+  public static defaults = ArticleTitles.instance({});
+  public fontSizes = [];
+
+  public static instance(options: Partial<ArticleTitles>) {
+    let instance = Object.assign(new ArticleTitles(), options);
+    instance.formatFontSizes(this.fontSize)
+    return Logger.proxyInstance(instance);
+  }
+
+  public formatFontSizes(fontSize: number) {
+    this.fontSizes = new Array(ArticleTitles.level).fill(fontSize)
+      .map((value, index) => fontSize * Math.pow(ArticleTitles.fontSizeRatio, index));
+  }
+
+  public format(canvas: Canvas) {
+    // 处理 h1，h1 只有一个
+    let h1 = canvas.graphicWithName("h1") as Solid;
+    if (h1) {
+      h1.textSize = this.fontSizes[0];
+      h1.textHorizontalAlignment = HorizontalTextAlignment.Center;
+    }
+    // 处理其他，其他可能重复
+    let indexes: Array<number> = [];
+    let prevGraphicLevel = 0;
+    for (let graphic of canvas.graphics) {
+      Graphics.each(graphic, graphic => {
+          if (!(graphic instanceof Solid)) return;
+          let matched = /^h(\d+)/.exec(graphic.name);
+          if (!matched) return;
+          let level = parseInt(matched[1]);
+          if (!(1 < level && level <= ArticleTitles.level)) return;// 处理 2 ~ 6 级别
+
+          if (prevGraphicLevel < level) indexes.push(0);
+          else if (prevGraphicLevel > level) indexes.pop();
+          prevGraphicLevel = level;
+          indexes[indexes.length - 1]++;
+          let text = graphic.text.split(".").pop().trim();
+          graphic.text = `${indexes.join(".")}. ${text}`
+          graphic.textSize = this.fontSizes[level - 1];
+          graphic.textHorizontalAlignment = HorizontalTextAlignment.Left;
+          Common.bolder(graphic);
+        }
+      )
+    }
+  }
+}
+
 // 获取到当前 this 对象，代理其上属性时需要重新赋值
 // var _this = this; // 错误的方式
 //@formatter:off
@@ -2643,12 +2810,12 @@ var _this = (function () {return this;})();
 //@formatter:on
 (() => {
   let library = new PlugIn.Library(new Version("0.1"));
-  [Common,
-    NotePainter,
+  [Common, Graphics,
+    Direction, TablePainter, NotePainter,
     CollectionPainter, RectCollectionPainter, NoteRectCollectionPainter,
     Memory, MemoryBlock, MemoryPainter,
-    ClassDiagram, Entity, EntityProperty, ClassDiagramPainter,
-    Stepper, LayerSwitcher]
+    ClassDiagram, ClassDiagramPainter, Entity, EntityProperty,
+    Stepper, LayerSwitcher, ArticleTitles]
     .forEach(item => {
       library[item.name] = item;
       Logger.proxyClassStaticFunction(item);

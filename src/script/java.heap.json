@@ -1,31 +1,37 @@
 {
-  "elements": [
-    "Eden",
-    "Survivor",
-    "Survivor",
-    "Virtual",
-    "Old",
-    "Virtual"
-  ],
-  "notes": [
-    [
-      {
-        "start": 0,
-        "end": 3,
-        "description": "Young"
-      },
-      {
-        "start": 4,
-        "end": 5,
-        "description": "Old"
-      }
+  "direction": "<direction>",
+  "notePainter": {
+    "anchorLineSize": 25
+  },
+  "content": {
+    "elements": [
+      "Eden",
+      "Survivor",
+      "Survivor",
+      "Virtual",
+      "Old",
+      "Virtual"
     ],
-    [
-      {
-        "start": 0,
-        "end": 5,
-        "description": "总大小\n–Xms<min>\n–Xmx<max>"
-      }
+    "notes": [
+      [
+        {
+          "start": 0,
+          "end": 3,
+          "description": "Young"
+        },
+        {
+          "start": 4,
+          "end": 5,
+          "description": "Old"
+        }
+      ],
+      [
+        {
+          "start": 0,
+          "end": 5,
+          "description": "总大小\n–Xms<min>\n–Xmx<max>"
+        }
+      ]
     ]
-  ]
+  }
 }

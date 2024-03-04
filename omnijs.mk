@@ -4,8 +4,6 @@ $(BUILD)/%.maps.json: $(BUILD)/%.maps
 	cat $< | sed -z 's/"/\\"/g;s/\n/\\n/g' | sed 's/^/["MemoryPainter",{"type":"maps","content":"/;s/$$/"}]/' > $@
 $(BUILD)/%.frames.json: $(BUILD)/%.frames
 	cat $< | sed '1d' | sed -z 's/"/\\"/g;s/\n/\\n/g' | sed 's/^/["MemoryPainter",{"type":"frames","content":"/; s/$$/"}]/' > $@
-$(BUILD)/%.class-diagram.json: $(BUILD)/%.json
-	@echo '["ClassDiagramPainter",{"entry":"CONSTANT_InvokeDynamic_info","entities":$(shell cat $<)}]' > $@
 #	cat $< | sed -z 's/"/\\"/g;s/\n/\\n/g' | | sed 's/^/["ClassDiagramPainter",{"entry":"CONSTANT_InvokeDynamic_info","entities":"/; s/$$/"}]/' > $@
 $(BUILD)/%.json: $(BUILD)/%
 	cat $< | sed -z 's/"/\\"/g;s/\n/\\n/g' | sed 's/^/"/;s/$$/"/' > $@
@@ -36,9 +34,8 @@ omnijs.plugin-perform.case: omnijs-run-file-encode/plugin-perform;
 # 编译 ts 文件
 tsc.delay:=1 # tsc 之后立即绘制，JS 文件更新不及时，等待 1 秒
 tsc:
-	cd $(SRC)/plugins/bundle/peace.omnigrafflejs/Resources && tsc
+	cd $(src)/plugins/bundle/peace.omnigrafflejs/Resources && tsc
 	sleep $(tsc.delay)
-
 
 ## 组件绘制方向
 component.directions:=LEFT_RIGHT
@@ -63,7 +60,9 @@ omnijs.rect.collection.case: tsc
 
 # 绘制注解矩形集合
 $(BUILD)/%.NoteRectCollectionPainter: $(BUILD)/%
-	@echo '["NoteRectCollectionPainter",{"direction":"$(DIRECTION)","content":$(shell cat $<)}]' > $@
+	echo '["NoteRectCollectionPainter",' > $@
+	cat $< | sed 's/<direction>/$(DIRECTION)/' >> $@
+	echo "]" >> $@
 omnijs.note.rect.collection.case: tsc
 	@for direction in $(component.directions) ; do \
 		make clean/*NoteRectCollectionPainter* omnijs-run-file DIRECTION=$$direction SCRIPT_CONTENT=class-caller.js.encode SCRIPT_ARGUMENT=java.heap.json.NoteRectCollectionPainter.encode; \
@@ -85,6 +84,10 @@ omnijs.memory.case: tsc
 omnijs.memory.clean.case: clean/*memory.*;
 
 # 绘制类图
+$(BUILD)/%.ClassDiagramPainter: $(BUILD)/%
+	echo '["ClassDiagramPainter",' > $@
+	cat $<  >> $@
+	echo "]" >> $@
 omnijs.class-diagram.case: omnijs.class-diagram.clean.case tsc
-	make omnijs-run-file SCRIPT_CONTENT=class-caller.js.encode SCRIPT_ARGUMENT=ConstantPool.class-diagram.json.encode
+	make omnijs-run-file SCRIPT_CONTENT=class-caller.js.encode SCRIPT_ARGUMENT=ConstantPool.json.ClassDiagramPainter.encode
 omnijs.class-diagram.clean.case: clean/*class-diagram*;

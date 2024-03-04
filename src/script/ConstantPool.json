@@ -1,303 +1,308 @@
-[
-  {
-    "name": "CONSTANT_Class_info",
-    "properties": [
+{
+  "content": {
+    "entry": "CONSTANT_InvokeDynamic_info",
+    "entities": [
       {
-        "type": "u1",
-        "name": "tag"
+        "name": "CONSTANT_Class_info",
+        "properties": [
+          {
+            "type": "u1",
+            "name": "tag"
+          },
+          {
+            "type": "u2",
+            "name": "name_index",
+            "ref": "CONSTANT_Utf8_info"
+          }
+        ]
       },
       {
-        "type": "u2",
-        "name": "name_index",
-        "ref": "CONSTANT_Utf8_info"
-      }
-    ]
-  },
-  {
-    "name": "CONSTANT_Fieldref_info",
-    "properties": [
-      {
-        "type": "u1",
-        "name": "tag"
+        "name": "CONSTANT_Fieldref_info",
+        "properties": [
+          {
+            "type": "u1",
+            "name": "tag"
+          },
+          {
+            "type": "u2",
+            "name": "class_index",
+            "ref": "CONSTANT_Class_info"
+          },
+          {
+            "type": "u2",
+            "name": "name_and_type_index",
+            "ref": "CONSTANT_NameAndType_info"
+          }
+        ]
       },
       {
-        "type": "u2",
-        "name": "class_index",
-        "ref": "CONSTANT_Class_info"
+        "name": "CONSTANT_Methodref_info",
+        "properties": [
+          {
+            "type": "u1",
+            "name": "tag"
+          },
+          {
+            "type": "u2",
+            "name": "class_index",
+            "ref": "CONSTANT_Class_info"
+          },
+          {
+            "type": "u2",
+            "name": "name_and_type_index",
+            "ref": "CONSTANT_NameAndType_info"
+          }
+        ]
       },
       {
-        "type": "u2",
-        "name": "name_and_type_index",
-        "ref": "CONSTANT_NameAndType_info"
-      }
-    ]
-  },
-  {
-    "name": "CONSTANT_Methodref_info",
-    "properties": [
-      {
-        "type": "u1",
-        "name": "tag"
+        "name": "CONSTANT_InterfaceMethodref_info",
+        "properties": [
+          {
+            "type": "u1",
+            "name": "tag"
+          },
+          {
+            "type": "u2",
+            "name": "class_index",
+            "ref": "CONSTANT_Class_info"
+          },
+          {
+            "type": "u2",
+            "name": "name_and_type_index",
+            "ref": "CONSTANT_NameAndType_info"
+          }
+        ]
       },
       {
-        "type": "u2",
-        "name": "class_index",
-        "ref": "CONSTANT_Class_info"
+        "name": "CONSTANT_String_info",
+        "properties": [
+          {
+            "type": "u1",
+            "name": "tag"
+          },
+          {
+            "type": "u2",
+            "name": "string_index",
+            "ref": "CONSTANT_Utf8_info"
+          }
+        ]
       },
       {
-        "type": "u2",
-        "name": "name_and_type_index",
-        "ref": "CONSTANT_NameAndType_info"
-      }
-    ]
-  },
-  {
-    "name": "CONSTANT_InterfaceMethodref_info",
-    "properties": [
-      {
-        "type": "u1",
-        "name": "tag"
+        "name": "CONSTANT_Integer_info",
+        "properties": [
+          {
+            "type": "u1",
+            "name": "tag"
+          },
+          {
+            "type": "u4",
+            "name": "bytes"
+          }
+        ]
       },
       {
-        "type": "u2",
-        "name": "class_index",
-        "ref": "CONSTANT_Class_info"
+        "name": "CONSTANT_Float_info",
+        "properties": [
+          {
+            "type": "u1",
+            "name": "tag"
+          },
+          {
+            "type": "u4",
+            "name": "bytes"
+          }
+        ]
       },
       {
-        "type": "u2",
-        "name": "name_and_type_index",
-        "ref": "CONSTANT_NameAndType_info"
-      }
-    ]
-  },
-  {
-    "name": "CONSTANT_String_info",
-    "properties": [
-      {
-        "type": "u1",
-        "name": "tag"
+        "name": "CONSTANT_Long_info",
+        "properties": [
+          {
+            "type": "u1",
+            "name": "tag"
+          },
+          {
+            "type": "u4",
+            "name": "high_bytes"
+          },
+          {
+            "type": "u4",
+            "name": "low_bytes"
+          }
+        ]
       },
       {
-        "type": "u2",
-        "name": "string_index",
-        "ref": "CONSTANT_Utf8_info"
-      }
-    ]
-  },
-  {
-    "name": "CONSTANT_Integer_info",
-    "properties": [
-      {
-        "type": "u1",
-        "name": "tag"
+        "name": "CONSTANT_Double_info",
+        "properties": [
+          {
+            "type": "u1",
+            "name": "tag"
+          },
+          {
+            "type": "u4",
+            "name": "high_bytes"
+          },
+          {
+            "type": "u4",
+            "name": "low_bytes"
+          }
+        ]
       },
       {
-        "type": "u4",
-        "name": "bytes"
-      }
-    ]
-  },
-  {
-    "name": "CONSTANT_Float_info",
-    "properties": [
-      {
-        "type": "u1",
-        "name": "tag"
+        "name": "CONSTANT_NameAndType_info",
+        "properties": [
+          {
+            "type": "u1",
+            "name": "tag"
+          },
+          {
+            "type": "u2",
+            "name": "name_index",
+            "ref": "CONSTANT_Utf8_info"
+          },
+          {
+            "type": "u2",
+            "name": "descriptor_index",
+            "ref": "CONSTANT_Utf8_info"
+          }
+        ]
       },
       {
-        "type": "u4",
-        "name": "bytes"
-      }
-    ]
-  },
-  {
-    "name": "CONSTANT_Long_info",
-    "properties": [
-      {
-        "type": "u1",
-        "name": "tag"
+        "name": "CONSTANT_Utf8_info",
+        "properties": [
+          {
+            "type": "u1",
+            "name": "tag"
+          },
+          {
+            "type": "u2",
+            "name": "length"
+          },
+          {
+            "type": "u1",
+            "name": "bytes[length]"
+          }
+        ]
       },
       {
-        "type": "u4",
-        "name": "high_bytes"
+        "name": "CONSTANT_MethodHandle_info",
+        "properties": [
+          {
+            "type": "u1",
+            "name": "tag"
+          },
+          {
+            "type": "u1",
+            "name": "reference_kind"
+          },
+          {
+            "type": "u2",
+            "name": "reference_index",
+            "ref": "CONSTANT_Methodref_info"
+          }
+        ]
       },
       {
-        "type": "u4",
-        "name": "low_bytes"
-      }
-    ]
-  },
-  {
-    "name": "CONSTANT_Double_info",
-    "properties": [
-      {
-        "type": "u1",
-        "name": "tag"
+        "name": "CONSTANT_MethodType_info",
+        "properties": [
+          {
+            "type": "u1",
+            "name": "tag"
+          },
+          {
+            "type": "u2",
+            "name": "descriptor_index",
+            "ref": "CONSTANT_Utf8_info"
+          }
+        ]
       },
       {
-        "type": "u4",
-        "name": "high_bytes"
+        "name": "CONSTANT_InvokeDynamic_info",
+        "properties": [
+          {
+            "type": "u1",
+            "name": "tag"
+          },
+          {
+            "type": "u2",
+            "name": "bootstrap_method_attr_index",
+            "ref": "BootstrapMethod"
+          },
+          {
+            "type": "u2",
+            "name": "name_and_type_index",
+            "ref": "CONSTANT_NameAndType_info"
+          }
+        ]
       },
       {
-        "type": "u4",
-        "name": "low_bytes"
-      }
-    ]
-  },
-  {
-    "name": "CONSTANT_NameAndType_info",
-    "properties": [
-      {
-        "type": "u1",
-        "name": "tag"
+        "name": "CONSTANT_Module_info",
+        "properties": [
+          {
+            "type": "u1",
+            "name": "tag"
+          },
+          {
+            "type": "u2",
+            "name": "name_index",
+            "ref": "CONSTANT_Utf8_info"
+          }
+        ]
       },
       {
-        "type": "u2",
-        "name": "name_index",
-        "ref": "CONSTANT_Utf8_info"
+        "name": "CONSTANT_Package_info",
+        "properties": [
+          {
+            "type": "u1",
+            "name": "tag"
+          },
+          {
+            "type": "u2",
+            "name": "name_index",
+            "ref": "CONSTANT_Utf8_info"
+          }
+        ]
       },
       {
-        "type": "u2",
-        "name": "descriptor_index",
-        "ref": "CONSTANT_Utf8_info"
-      }
-    ]
-  },
-  {
-    "name": "CONSTANT_Utf8_info",
-    "properties": [
-      {
-        "type": "u1",
-        "name": "tag"
+        "name": "BootstrapMethods_attribute",
+        "properties": [
+          {
+            "type": "u2",
+            "name": "attribute_name_index",
+            "ref": "CONSTANT_Utf8_info"
+          },
+          {
+            "type": "u4",
+            "name": "attribute_length"
+          },
+          {
+            "type": "u2",
+            "name": "num_bootstrap_methods"
+          },
+          {
+            "type": "BootstrapMethod",
+            "name": "bootstrap_methods[num_bootstrap_methods]",
+            "ref": "BootstrapMethod"
+          }
+        ]
       },
       {
-        "type": "u2",
-        "name": "length"
-      },
-      {
-        "type": "u1",
-        "name": "bytes[length]"
-      }
-    ]
-  },
-  {
-    "name": "CONSTANT_MethodHandle_info",
-    "properties": [
-      {
-        "type": "u1",
-        "name": "tag"
-      },
-      {
-        "type": "u1",
-        "name": "reference_kind"
-      },
-      {
-        "type": "u2",
-        "name": "reference_index",
-        "ref": "CONSTANT_Methodref_info"
-      }
-    ]
-  },
-  {
-    "name": "CONSTANT_MethodType_info",
-    "properties": [
-      {
-        "type": "u1",
-        "name": "tag"
-      },
-      {
-        "type": "u2",
-        "name": "descriptor_index",
-        "ref": "CONSTANT_Utf8_info"
-      }
-    ]
-  },
-  {
-    "name": "CONSTANT_InvokeDynamic_info",
-    "properties": [
-      {
-        "type": "u1",
-        "name": "tag"
-      },
-      {
-        "type": "u2",
-        "name": "bootstrap_method_attr_index",
-        "ref": "BootstrapMethod"
-      },
-      {
-        "type": "u2",
-        "name": "name_and_type_index",
-        "ref": "CONSTANT_NameAndType_info"
-      }
-    ]
-  },
-  {
-    "name": "CONSTANT_Module_info",
-    "properties": [
-      {
-        "type": "u1",
-        "name": "tag"
-      },
-      {
-        "type": "u2",
-        "name": "name_index",
-        "ref": "CONSTANT_Utf8_info"
-      }
-    ]
-  },
-  {
-    "name": "CONSTANT_Package_info",
-    "properties": [
-      {
-        "type": "u1",
-        "name": "tag"
-      },
-      {
-        "type": "u2",
-        "name": "name_index",
-        "ref": "CONSTANT_Utf8_info"
-      }
-    ]
-  },
-  {
-    "name": "BootstrapMethods_attribute",
-    "properties": [
-      {
-        "type": "u2",
-        "name": "attribute_name_index",
-        "ref": "CONSTANT_Utf8_info"
-      },
-      {
-        "type": "u4",
-        "name": "attribute_length"
-      },
-      {
-        "type": "u2",
-        "name": "num_bootstrap_methods"
-      },
-      {
-        "type": "BootstrapMethod",
-        "name": "bootstrap_methods[num_bootstrap_methods]",
-        "ref": "BootstrapMethod"
-      }
-    ]
-  },
-  {
-    "name": "BootstrapMethod",
-    "properties": [
-      {
-        "type": "u2",
-        "name": "bootstrap_method_ref",
-        "ref": "CONSTANT_MethodHandle_info"
-      },
-      {
-        "type": "u2",
-        "name": "num_bootstrap_arguments"
-      },
-      {
-        "type": "u2",
-        "name": "bootstrap_arguments[num_bootstrap_arguments]"
+        "name": "BootstrapMethod",
+        "properties": [
+          {
+            "type": "u2",
+            "name": "bootstrap_method_ref",
+            "ref": "CONSTANT_MethodHandle_info"
+          },
+          {
+            "type": "u2",
+            "name": "num_bootstrap_arguments"
+          },
+          {
+            "type": "u2",
+            "name": "bootstrap_arguments[num_bootstrap_arguments]"
+          }
+        ]
       }
     ]
   }
-]
+}

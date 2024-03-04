@@ -1,6 +1,7 @@
 .SECONDARY:#保留中间过程文件
 
-EXTERNAL_SRC+=$(SRC)/script $(SRC)/code
+SRC:=src/script src/code
 include build.common.mk
 include copy-as-js.mk
 include omnijs.mk
+include make.debug.mk
